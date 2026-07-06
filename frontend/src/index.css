@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 80 8% 93%;
+    --foreground: 135 6% 13%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 135 6% 13%;
+
+    --card-index: 45 33% 98%; /* slightly warm off-white for index cards */
+
+    --primary: 354 73.5% 41.4%;         /* stegu red */
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 354 73.5% 30%; /* slightly darker stegu red for hover state */
+
+    --secondary: 80 8% 93%;
+    --secondary-foreground: 135 6% 13%;
+
+    --muted: 80 8% 93%;
+    --muted-foreground: 94 3% 42%;
+
+    --accent: 80 8% 90%;
+    --accent-foreground: 135 6% 13%;
+
+    --border: 70 7% 84%;
+    --input: 70 7% 84%;
+    --ring: 22 27% 33%;
+
+    --public: 138 26% 33%;
+    --internal: 41 49% 36%;
+    --restricted: 7 55% 38%;
+
+    --radius: 0.25rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+    font-size: 14px;
+  }
+}
+
+@keyframes stamp-in {
+  from { opacity: 0; transform: rotate(3deg) scale(1.3); }
+  to { opacity: 1; transform: rotate(3deg) scale(1); }
+}
+
+.stamp-badge {
+  animation: stamp-in 0.3s ease;
+}

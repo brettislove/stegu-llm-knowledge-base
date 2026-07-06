@@ -1,0 +1,216 @@
+import React, { useEffect, useState } from "react";
+import { api } from "../api.js";
+import { parseFeedbackLog, parseLessons } from "@/lib/parseWiki";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+export default function ReviewPanel() {
+  const [feedbackLog, setFeedbackLog] = useState("");
+  const [lessons, setLessons] = useState("");
+  const [lintReport, setLintReport] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [lintBusy, setLintBusy] = useState(false);
+  const [summary, setSummary] = useState(null);
+  const [lintSummary, setLintSummary] = useState(null);
+  const [error, setError] = useState(null);
+  const [view, setView] = useState("parsed"); // "parsed" | "raw"
+
+  async function refresh() {
+    try {
+      const [fb, ls, lr] = await Promise.all([
+        api.getFile("feedback_log.md"),
+        api.getFile("lessons.md"),
+        api.getFile("lint-report.md"),
+      ]);
+      setFeedbackLog(fb.content);
+      setLessons(ls.content);
+      setLintReport(lr.content);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  async function runDistill() {
+    setBusy(true);
+    setSummary(null);
+    setError(null);
+    try {
+      const { summary } = await api.distill();
+      setSummary(summary);
+      await refresh();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runLintCheck() {
+    setLintBusy(true);
+    setLintSummary(null);
+    setError(null);
+    try {
+      const { summary } = await api.lint();
+      setLintSummary(summary);
+      await refresh();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLintBusy(false);
+    }
+  }
+
+  const entries = parseFeedbackLog(feedbackLog);
+  const unprocessedCount = entries.filter((e) => e.status === "unprocessed").length;
+  const lessonSections = parseLessons(lessons);
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="border-b border-border px-7 pb-3.5 pt-5">
+        <h1 className="font-display text-[22px] font-semibold">Review feedback</h1>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          Flagged corrections wait here until you run distillation — turning them into
+          either a direct page fix or a standing rule in lessons.md. The wiki health
+          check below is report-only — it never fixes anything itself.
+        </p>
+      </div>
+      <div className="flex-1 overflow-y-auto px-7 py-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button onClick={runDistill} disabled={busy || unprocessedCount === 0}>
+            {busy ? "Distilling…" : `Run distillation${unprocessedCount ? ` (${unprocessedCount} pending)` : ""}`}
+          </Button>
+          <Tabs value={view} onValueChange={setView}>
+            <TabsList>
+              <TabsTrigger value="parsed">Parsed</TabsTrigger>
+              <TabsTrigger value="raw">Raw markdown</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        {error && (
+          <Card className="mt-4 border-l-[3px] border-l-[hsl(var(--restricted))]">
+            <CardContent className="p-3.5 text-sm">Error: {error}</CardContent>
+          </Card>
+        )}
+        {summary && (
+          <Card className="mt-4 border-l-[3px] border-l-primary">
+            <CardContent className="whitespace-pre-wrap p-3.5 text-sm">{summary}</CardContent>
+          </Card>
+        )}
+
+        {/* --- Feedback --- */}
+        <h2 className="mt-6 mb-2 font-display text-base font-semibold">Feedback log</h2>
+        {view === "parsed" ? (
+          entries.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No feedback recorded yet.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {entries.map((entry, i) => (
+                <Card key={i}>
+                  <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+                    <span className="font-mono text-[11px] text-muted-foreground">{entry.date}</span>
+                    <Badge variant={entry.status === "processed" ? "public" : "internal"}>
+                      {entry.status}
+                    </Badge>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-2 pt-0 text-sm">
+                    {entry.question && (
+                      <div>
+                        <span className="font-medium">Question: </span>
+                        {entry.question}
+                      </div>
+                    )}
+                    {entry.badAnswer && (
+                      <div>
+                        <span className="font-medium">Flagged answer: </span>
+                        <span className="text-muted-foreground">{entry.badAnswer}</span>
+                      </div>
+                    )}
+                    {entry.correction && (
+                      <div>
+                        <span className="font-medium">Correction: </span>
+                        {entry.correction}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )
+        ) : (
+          <Card>
+            <CardContent className="p-4">
+              <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
+                {feedbackLog || "(empty)"}
+              </pre>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* --- Lessons --- */}
+        <h2 className="mt-7 mb-2 font-display text-base font-semibold">Standing lessons</h2>
+        {view === "parsed" ? (
+          lessonSections.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No lessons distilled yet.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {lessonSections.map((section, i) => (
+                <Card key={i}>
+                  <CardHeader className="pb-2">
+                    <CardTitle>{section.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <ul className="list-disc space-y-1 pl-5 text-sm">
+                      {section.items.map((item, j) => (
+                        <li key={j}>{item}</li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )
+        ) : (
+          <Card>
+            <CardContent className="p-4">
+              <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
+                {lessons || "(empty)"}
+              </pre>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* --- Wiki health (lint) --- */}
+        <div className="mt-8 flex items-center justify-between">
+          <h2 className="font-display text-base font-semibold">Wiki health</h2>
+          <Button variant="secondary" size="sm" onClick={runLintCheck} disabled={lintBusy}>
+            {lintBusy ? "Checking…" : "Run wiki health check"}
+          </Button>
+        </div>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          Checks for orphan pages, broken references, stale claims, missing
+          frontmatter, and contradictions. Report-only — nothing here gets fixed
+          automatically.
+        </p>
+        {lintSummary && (
+          <Card className="mt-3 border-l-[3px] border-l-primary">
+            <CardContent className="whitespace-pre-wrap p-3.5 text-sm">{lintSummary}</CardContent>
+          </Card>
+        )}
+        <Card className="mt-3">
+          <CardContent className="p-4">
+            <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
+              {lintReport || "(empty)"}
+            </pre>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
