@@ -16,8 +16,9 @@ export const api = {
   query: (question, mode) =>
     request("/query", { method: "POST", body: JSON.stringify({ question, mode }) }),
 
-  ingest: (filename, { pdf_base64, markdown } = {}) =>
-    request("/ingest", { method: "POST", body: JSON.stringify({ filename, pdf_base64, markdown }) }),
+  // Updated to accept unified file_base64 parameter
+  ingest: (filename, file_base64) =>
+    request("/ingest", { method: "POST", body: JSON.stringify({ filename, file_base64 }) }),
 
   feedback: (question, bad_answer, correction) =>
     request("/feedback", {

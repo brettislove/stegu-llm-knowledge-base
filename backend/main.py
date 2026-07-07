@@ -5,7 +5,6 @@ Run from the project root with:
     uvicorn backend.main:app --reload --port 8000
 """
 from datetime import datetime, timezone
-
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
@@ -17,6 +16,7 @@ from backend.agents.query_agent import answer_query
 from backend.agents.distill_agent import run_distillation
 from backend.agents.lint_agent import run_lint
 from backend.tools import file_tools
+from backend.converters import convert_file  # New import
 
 app = FastAPI(title="Knowledge Base MVP")
 
@@ -30,8 +30,7 @@ app.add_middleware(
 
 class IngestRequest(BaseModel):
     filename: str
-    pdf_base64: Optional[str] = None  # raw PDF, base64-encoded — Claude reads it natively
-    markdown: Optional[str] = None    # already-converted markdown, sent as plain text
+    file_base64: str  # Unified raw base64 string for all extensions
 
 
 class QueryRequest(BaseModel):
@@ -48,9 +47,17 @@ class FeedbackRequest(BaseModel):
 @app.post("/ingest")
 def ingest(req: IngestRequest):
     try:
-        result = ingest_document(req.filename, pdf_base64=req.pdf_base64, markdown=req.markdown)
-        return {"summary": result["final_text"], "turns": result["turns"], "cache_read_tokens": result.get("cache_read_tokens", 0)}
+        # Route through converter module first to preserve original ingest_document logic
+        pdf_base64, markdown = convert_file(req.filename, req.file_base64)
+        
+        result = ingest_document(req.filename, pdf_base64=pdf_base64, markdown=markdown)
+        return {
+            "summary": result["final_text"], 
+            "turns": result["turns"], 
+            "cache_read_tokens": result.get("cache_read_tokens", 0)
+        }
     except ValueError as e:
+        # Clean catch for unsupported extensions or malformed parsing
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

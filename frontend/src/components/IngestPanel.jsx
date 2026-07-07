@@ -1,10 +1,11 @@
 import React, { useRef, useState } from "react";
-import { api, pdfToBase64, readAsText } from "../api.js";
+import { api, pdfToBase64 } from "../api.js";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-const ACCEPTED_EXTENSIONS = [".pdf", ".md", ".markdown"];
+// Expanded file coverage matrix
+const ACCEPTED_EXTENSIONS = [".pdf", ".md", ".markdown", ".txt", ".docx", ".xlsx", ".csv"];
 
 function isAccepted(file) {
   return ACCEPTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext));
@@ -32,10 +33,9 @@ export default function IngestPanel() {
     setSummary(null);
     setError(null);
     try {
-      const isPdf = file.name.toLowerCase().endsWith(".pdf");
-      const { summary } = isPdf
-        ? await api.ingest(file.name, { pdf_base64: await pdfToBase64(file) })
-        : await api.ingest(file.name, { markdown: await readAsText(file) });
+      // Every file type now goes through unified base64 formatting
+      const base64Data = await pdfToBase64(file);
+      const { summary } = await api.ingest(file.name, base64Data);
       setSummary(summary);
     } catch (e) {
       setError(e.message);
@@ -47,10 +47,10 @@ export default function IngestPanel() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="border-b border-border px-7 pb-3.5 pt-5">
-        <h1 className="font-display text-[22px] font-semibold">Ingest</h1>
+        <h1 className="font-display text-[22px] font-semibold">Přidat dokument</h1>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Drop in a source PDF (Claude reads it directly, no conversion step) or an
-          already-converted markdown file.
+          Drop in a source file (.pdf, .md, .markdown, .txt, .docx, .xlsx, .csv). 
+          Document structures and tabular content are auto-parsed for the agent.
         </p>
       </div>
       <div className="flex-1 overflow-y-auto px-7 py-5">
@@ -71,11 +71,11 @@ export default function IngestPanel() {
           }}
           onClick={() => inputRef.current?.click()}
         >
-          Drop a PDF or .md file here, or click to choose one
+          Drop a document or data file here, or click to choose one
           <input
             ref={inputRef}
             type="file"
-            accept=".pdf,.md,.markdown"
+            accept={ACCEPTED_EXTENSIONS.join(",")}
             className="hidden"
             onChange={(e) => pickFile(e.target.files[0])}
           />

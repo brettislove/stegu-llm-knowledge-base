@@ -4,3 +4,8 @@
 /venv
 
 /frontend/node_modules
+
+/.obsidian
+
+/backend/__pycache__
+/backend/agents/__pycache__

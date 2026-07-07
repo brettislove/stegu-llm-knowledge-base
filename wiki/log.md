@@ -12,3 +12,8 @@ Append-only. Maintained by the ingest agent.
 - Created: installation/montazni-navod-stegu-obklady.md (montážní návod pro obklady a dlažby STEGU — příprava podkladu, lepení, spárování, impregnace, venkovní dlažby)
 - Created: chemistry/stegu-stavebni-chemie.md (přehled stavební chemie STEGU — balení a vydatnost)
 - Updated: index.md (added Installation and Chemistry entries)
+
+
+## 2025-07-16 — ingested vseobecne-obchodni-podminky.pdf
+- Created: business/obchodni-podminky-stegu.md (VOP v25.01, DECORSTONE s.r.o./STEGU terms and conditions — ordering, delivery, pallet pricing, payment terms, complaints, consumer rights)
+- Updated: index.md (added Business category entry)

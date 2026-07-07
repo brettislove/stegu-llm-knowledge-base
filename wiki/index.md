@@ -17,6 +17,7 @@ page, grouped by category.
 ## Logistics
 
 ## Business
+- [Všeobecné obchodní podmínky — DECORSTONE, s.r.o. (STEGU)](business/obchodni-podminky-stegu.md) — VOP v25.01, platné od 16.7.2025: objednávky, dodání, ceny palet/dopravy, platební podmínky, reklamace, práva spotřebitele.
 
 ## General
 
