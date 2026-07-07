@@ -10,7 +10,7 @@ RAW_ROOT = PROJECT_ROOT / "raw"
 SCHEMA_PATH = PROJECT_ROOT / "SCHEMA.md"
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
+MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5")
 
 # Mirrors VALID_CATEGORY / VALID_DOC_TYPE from SCHEMA.md — keep these two
 # in sync any time the schema changes.
