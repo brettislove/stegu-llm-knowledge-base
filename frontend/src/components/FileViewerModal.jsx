@@ -40,8 +40,8 @@ export default function FileViewerModal({ path, open, onOpenChange }) {
           )}
         </DialogHeader>
         <DialogBody>
-          {error && <p className="text-[hsl(var(--restricted))]">Error: {error}</p>}
-          {!error && content === null && <p className="text-muted-foreground">Loading…</p>}
+          {error && <p className="text-[hsl(var(--restricted))]">Chyba: {error}</p>}
+          {!error && content === null && <p className="text-muted-foreground">Načítání…</p>}
           {content !== null && (
             <pre className="whitespace-pre-wrap font-mono text-[12.5px]">{content}</pre>
           )}

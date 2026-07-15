@@ -37,13 +37,12 @@ export default function CitedPagesPanel({ paths }) {
   return (
     <div className="flex h-full flex-col overflow-hidden border-l border-border bg-card">
       <div className="px-4 pb-3 pt-5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-        Referenced pages
+        Odkazované stránky
       </div>
       <ScrollArea className="flex-1 min-h-0 px-4 pb-4">
         {paths.length === 0 && (
           <p className="text-[12.5px] italic text-muted-foreground">
-            Pages the assistant reads to answer a question will show up here, with their
-            access level flagged.
+            Soubory, které asistent použil pro odpověď na otázku, se zobrazují s označenou úrovní přístupu.
           </p>
         )}
         <div className="flex flex-col gap-3">
@@ -55,7 +54,7 @@ export default function CitedPagesPanel({ paths }) {
                 <Card key={path} className="bg-[hsl(var(--card-index))] animate-fade-in">
                   <CardContent className="p-3">
                     <div className="break-all font-mono text-[11.5px]">{path}</div>
-                    <div className="mt-1.5 text-[11px] text-muted-foreground">Could not load this page.</div>
+                    <div className="mt-1.5 text-[11px] text-muted-foreground">Nelze načíst tuto stránku.</div>
                   </CardContent>
                 </Card>
               );

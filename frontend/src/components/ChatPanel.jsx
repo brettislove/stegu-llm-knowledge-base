@@ -65,17 +65,17 @@ export default function ChatPanel({ onCitedPaths }) {
   return (
     <div className="flex h-full flex-col bg-background">
       <div className="border-b border-border px-7 pb-3.5 pt-5 bg-card">
-        <h1 className="font-display text-[22px] font-semibold tracking-tight">Ask the Knowledge Base</h1>
+        <h1 className="font-display text-[22px] font-semibold tracking-tight">Zeptej se Stegu LLM Wiki</h1>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Query the wiki directly, or draft an answer for a customer email.
+          Zeptej se přímo Wiki nebo si nech vygenerovat návrh odpovědi na zákaznický e-mail.
         </p>
       </div>
 
       <div className="px-7 py-3 border-b border-border bg-muted/30">
         <Tabs value={mode} onValueChange={setMode} className="w-full max-w-[400px]">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="internal">Internal Search</TabsTrigger>
-            <TabsTrigger value="public">Draft Public Reply</TabsTrigger>
+            <TabsTrigger value="internal">Interní vyhledávání</TabsTrigger>
+            <TabsTrigger value="public">Veřejné odpovědi</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -100,7 +100,7 @@ export default function ChatPanel({ onCitedPaths }) {
                     {m.feedbackSent ? (
                       <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium text-emerald-600 dark:text-emerald-500">
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        Feedback recorded
+                        Zpětná vazba odeslána
                       </span>
                     ) : (
                       <button
@@ -108,7 +108,7 @@ export default function ChatPanel({ onCitedPaths }) {
                         onClick={() => toggleFeedback(m.id)}
                       >
                         <Flag className="h-3.5 w-3.5" />
-                        Flag incorrect answer
+                        Označit nesprávnou odpověď
                       </button>
                     )}
                     {m.feedbackOpen && <FeedbackForm onSubmit={(c) => submitFeedback(m, c)} />}
@@ -141,7 +141,7 @@ export default function ChatPanel({ onCitedPaths }) {
       <div className="p-4 sm:p-7 pt-0">
         <div className="mx-auto max-w-3xl relative flex items-center rounded-lg border border-input bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring">
           <Textarea
-            placeholder="Ask a question about the knowledge base..."
+            placeholder="Zeptejte se Stegu LLM Wiki nebo si nechte vygenerovat návrh odpovědi na e-mail..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -159,11 +159,11 @@ export default function ChatPanel({ onCitedPaths }) {
             className="absolute right-2 bottom-2 h-8 w-8 rounded-md"
           >
             <Send className="h-4 w-4" />
-            <span className="sr-only">Send</span>
+            <span className="sr-only">Odeslat</span>
           </Button>
         </div>
         <p className="mt-2 text-center text-[11px] text-muted-foreground">
-          AI agents can make mistakes. Always verify information before sending to clients.
+          AI agenti mohou dělat chyby. Před odesláním klientům si informace vždy ověřte.
         </p>
       </div>
     </div>
@@ -182,7 +182,7 @@ function FeedbackForm({ onSubmit }) {
       />
       <div className="flex justify-end">
         <Button variant="secondary" size="sm" className="h-7 text-xs" onClick={() => onSubmit(value)}>
-          Submit Correction
+          Odeslat opravu
         </Button>
       </div>
     </div>

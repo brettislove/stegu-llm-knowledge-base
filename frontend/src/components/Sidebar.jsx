@@ -18,8 +18,8 @@ const CATEGORIES = [
 
 const TABS = [
   { id: "ask", label: "Ask" },
-  { id: "ingest", label: "Ingest" },
-  { id: "review", label: "Review feedback" },
+  { id: "ingest", label: "Nahrát" },
+  { id: "review", label: "Zkontrolovat zpětnou vazbu" },
 ];
 
 export default function Sidebar({ tab, setTab, onOpenFile }) {

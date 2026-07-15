@@ -73,11 +73,11 @@ export default function ReviewPanel() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="border-b border-border px-7 pb-3.5 pt-5">
-        <h1 className="font-display text-[22px] font-semibold">Review feedback</h1>
+        <h1 className="font-display text-[22px] font-semibold">Zkontrolovat zpětnou vazbu</h1>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Flagged corrections wait here until you run distillation — turning them into
-          either a direct page fix or a standing rule in lessons.md. The wiki health
-          check below is report-only — it never fixes anything itself.
+          Označené opravy čekají zde, dokud nespustíte destilaci - ta je převede buď na
+          přímou opravu stránky, nebo na trvalé pravidlo v lessons.md. Kontrola wiki health
+          níže je pouze pro reportování - sama nic neopravuje.
         </p>
       </div>
       <div className="flex-1 overflow-y-auto px-7 py-5">
@@ -87,15 +87,15 @@ export default function ReviewPanel() {
           </Button>
           <Tabs value={view} onValueChange={setView}>
             <TabsList>
-              <TabsTrigger value="parsed">Parsed</TabsTrigger>
-              <TabsTrigger value="raw">Raw markdown</TabsTrigger>
+              <TabsTrigger value="parsed">Analyzováno</TabsTrigger>
+              <TabsTrigger value="raw">Čistý markdown</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
 
         {error && (
           <Card className="mt-4 border-l-[3px] border-l-[hsl(var(--restricted))]">
-            <CardContent className="p-3.5 text-sm">Error: {error}</CardContent>
+            <CardContent className="p-3.5 text-sm">Chyba: {error}</CardContent>
           </Card>
         )}
         {summary && (
@@ -105,10 +105,10 @@ export default function ReviewPanel() {
         )}
 
         {/* --- Feedback --- */}
-        <h2 className="mt-6 mb-2 font-display text-base font-semibold">Feedback log</h2>
+        <h2 className="mt-6 mb-2 font-display text-base font-semibold">Zpětná vazba</h2>
         {view === "parsed" ? (
           entries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No feedback recorded yet.</p>
+            <p className="text-sm text-muted-foreground">Zatím nebyla zaznamenána žádná zpětná vazba.</p>
           ) : (
             <div className="flex flex-col gap-3">
               {entries.map((entry, i) => (
@@ -122,19 +122,19 @@ export default function ReviewPanel() {
                   <CardContent className="flex flex-col gap-2 pt-0 text-sm">
                     {entry.question && (
                       <div>
-                        <span className="font-medium">Question: </span>
+                        <span className="font-medium">Otázka: </span>
                         {entry.question}
                       </div>
                     )}
                     {entry.badAnswer && (
                       <div>
-                        <span className="font-medium">Flagged answer: </span>
+                        <span className="font-medium">Označená odpověď: </span>
                         <span className="text-muted-foreground">{entry.badAnswer}</span>
                       </div>
                     )}
                     {entry.correction && (
                       <div>
-                        <span className="font-medium">Correction: </span>
+                        <span className="font-medium">Oprava: </span>
                         {entry.correction}
                       </div>
                     )}

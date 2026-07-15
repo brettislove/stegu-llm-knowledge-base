@@ -49,8 +49,8 @@ export default function IngestPanel() {
       <div className="border-b border-border px-7 pb-3.5 pt-5">
         <h1 className="font-display text-[22px] font-semibold">Přidat dokument</h1>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Drop in a source file (.pdf, .md, .markdown, .txt, .docx, .xlsx, .csv). 
-          Document structures and tabular content are auto-parsed for the agent.
+          Vložte zdrojový soubor (.pdf, .md, .markdown, .txt, .docx, .xlsx, .csv).
+          Struktury dokumentu a tabulkový obsah jsou pro agenta analyzovány automaticky.
         </p>
       </div>
       <div className="flex-1 overflow-y-auto px-7 py-5">
@@ -71,7 +71,7 @@ export default function IngestPanel() {
           }}
           onClick={() => inputRef.current?.click()}
         >
-          Drop a document or data file here, or click to choose one
+          Vložte dokument nebo datový soubor sem, nebo klikněte pro výběr
           <input
             ref={inputRef}
             type="file"
@@ -92,7 +92,7 @@ export default function IngestPanel() {
 
         {error && (
           <Card className="mt-5 border-l-[3px] border-l-[hsl(var(--restricted))]">
-            <CardContent className="p-3.5 text-sm">Error: {error}</CardContent>
+            <CardContent className="p-3.5 text-sm">Chyba: {error}</CardContent>
           </Card>
         )}
         {summary && (
