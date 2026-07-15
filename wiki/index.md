@@ -18,6 +18,7 @@ page, grouped by category.
 
 ## Business
 - [Všeobecné obchodní podmínky — DECORSTONE, s.r.o. (STEGU)](business/obchodni-podminky-stegu.md) — VOP v25.01, platné od 16.7.2025: objednávky, dodání, ceny palet/dopravy, platební podmínky, reklamace, práva spotřebitele.
+- [Cíle a strategie 2026](business/cile-a-strategie-2026.md) — RESTRICTED, interní. Růstové páky (velkoobchod + e-shop), brzdy růstu, cenové hladiny, cíle e-shopu 2026 (obrat 10M Kč, 1000 objednávek).
 
 ## General
 

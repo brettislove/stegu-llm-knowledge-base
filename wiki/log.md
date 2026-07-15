@@ -17,3 +17,8 @@ Append-only. Maintained by the ingest agent.
 ## 2025-07-16 — ingested vseobecne-obchodni-podminky.pdf
 - Created: business/obchodni-podminky-stegu.md (VOP v25.01, DECORSTONE s.r.o./STEGU terms and conditions — ordering, delivery, pallet pricing, payment terms, complaints, consumer rights)
 - Updated: index.md (added Business category entry)
+
+
+## 2026-06-12 — ingested cile-a-strategie.md
+- Created: business/cile-a-strategie-2026.md (access: restricted) — 2026 growth strategy: wholesale vs. e-shop priorities, growth blockers, pricing-tier initiative, e-shop 2026 KPI targets, strategic priorities from v6 dataset.
+- Updated: index.md (added Business entry for new strategy page)
