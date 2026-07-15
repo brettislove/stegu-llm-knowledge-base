@@ -2,7 +2,7 @@
 Query agent — answers a question against the wiki. Read-only: no write_file,
 no append_log, so it cannot corrupt the wiki regardless of what it decides
 to do. Used both for the dashboard chat (mode="internal") and for drafting
-customer email replies (mode="customer_email"), which differ only in which
+customer email replies (mode="public"), which differ only in which
 access levels may be cited.
 """
 from backend.agentic_loop import run_agent_loop
@@ -36,7 +36,7 @@ in one turn rather than one at a time.
 {schema}
 """
 
-CUSTOMER_EMAIL_RULE = """This answer will be used in an EMAIL REPLY TO A CUSTOMER.
+PUBLIC_RULE = """This answer will be used in an EMAIL REPLY TO A CUSTOMER.
 You may ONLY cite pages with access: public in their frontmatter. Never
 reference or reveal content from access: internal or access: restricted
 pages, even indirectly or paraphrased. If the only relevant information
@@ -61,9 +61,9 @@ def _dispatch(tool_name: str, tool_input: dict) -> str:
 
 
 def answer_query(question: str, mode: str = "internal") -> dict:
-    if mode not in {"internal", "customer_email"}:
-        raise ValueError("mode must be 'internal' or 'customer_email'")
+    if mode not in {"internal", "public"}:
+        raise ValueError("mode must be 'internal' or 'public'")
     schema_text = SCHEMA_PATH.read_text(encoding="utf-8")
-    access_rule = CUSTOMER_EMAIL_RULE if mode == "customer_email" else INTERNAL_RULE
+    access_rule = PUBLIC_RULE if mode == "public" else INTERNAL_RULE
     system_prompt = SYSTEM_PROMPT.format(access_rule=access_rule, schema=schema_text)
     return run_agent_loop(system_prompt, question, QUERY_TOOLS, _dispatch)
