@@ -9,5 +9,8 @@
 
 /backend/__pycache__
 /backend/agents/__pycache__
-backend/__pycache__/config.cpython-312.pyc
 __pycache__/
+
+.DS_Store
+/backend/.DS_Store
+/frontend/.DS_Store
