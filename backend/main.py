@@ -17,6 +17,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from backend.agents.classify_agent import classify_document
@@ -139,6 +140,162 @@ def _run_full_ingest(filename: str, raw_bytes: bytes, classification: dict) -> d
     }
 
 
+def _sse(event: dict) -> str:
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+def _write_and_finalize(filename, raw_bytes, classification, content_for_llm):
+    destination_path = _resolve_destination(classification)
+    category = classification["category"]
+    topic = classification.get("topic") or None
+    governing_index = file_tools.governing_index_path(category, topic)
+
+    _store_raw_sibling(destination_path, filename, raw_bytes)
+    result = write_page(
+        filename, content_for_llm, destination_path, governing_index, classification
+    )
+    return destination_path, category, topic, result
+
+
+def _finalize(destination_path, category, topic, raw_bytes, result):
+    raw_hash = hashing.compute_hash_bytes(raw_bytes)
+    finalize_page(destination_path, category, topic, raw_hash)
+
+    split_hint = None
+    prefix = f"{category}/{topic}" if topic else category
+    if hashing.needs_split(prefix):
+        split_hint = (
+            f"Category '{prefix}' has crossed the file-count/token threshold — "
+            f"consider running POST /split/{category}."
+        )
+    return {
+        "status": "ingested",
+        "destination": destination_path,
+        "summary": result["final_text"],
+        "turns": result["turns"],
+        "cache_read_tokens": result.get("cache_read_tokens", 0),
+        "split_hint": split_hint,
+    }
+
+
+def _ingest_pipeline(req: IngestRequest):
+    """
+    Sync generator yielding one SSE 'data: {...}' string per stage
+    transition. Mirrors the exact same logic as /ingest, just narrated
+    stage-by-stage instead of returning a single JSON blob at the end.
+    """
+    yield _sse({"stage": "upload", "status": "start", "label": "Nahrávání souboru"})
+    try:
+        raw_bytes = base64.b64decode(req.file_base64)
+    except Exception as e:
+        yield _sse(
+            {"stage": "upload", "status": "error", "message": f"Malformed base64: {e}"}
+        )
+        return
+    yield _sse({"stage": "upload", "status": "done"})
+
+    yield _sse(
+        {"stage": "hash_check", "status": "start", "label": "Kontrola duplicity"}
+    )
+    raw_hash = hashing.compute_hash_bytes(raw_bytes)
+    existing = hashing.find_by_hash(raw_hash)
+    if existing:
+        yield _sse({"stage": "hash_check", "status": "done"})
+        yield _sse(
+            {
+                "stage": "finished",
+                "result": {
+                    "status": "unchanged",
+                    "message": f"Tento soubor je již ve wiki beze změny ({existing}).",
+                },
+            }
+        )
+        return
+    yield _sse({"stage": "hash_check", "status": "done"})
+
+    yield _sse({"stage": "convert", "status": "start", "label": "Převod dokumentu"})
+    try:
+        content_for_llm = _build_llm_content(req.filename, req.file_base64, raw_bytes)
+    except ValueError as e:
+        yield _sse({"stage": "convert", "status": "error", "message": str(e)})
+        return
+    yield _sse({"stage": "convert", "status": "done"})
+
+    yield _sse(
+        {"stage": "classify", "status": "start", "label": "Klasifikace dokumentu"}
+    )
+    try:
+        classification = classify_document(req.filename, content_for_llm)
+    except Exception as e:
+        yield _sse({"stage": "classify", "status": "error", "message": str(e)})
+        return
+    yield _sse(
+        {
+            "stage": "classify",
+            "status": "done",
+            "detail": {
+                "category": classification.get("category"),
+                "topic": classification.get("topic"),
+                "confidence": classification.get("confidence"),
+            },
+        }
+    )
+
+    if classification.get("confidence") == "low":
+        qid = uuid.uuid4().hex[:12]
+        ext = req.filename.rsplit(".", 1)[-1] if "." in req.filename else "bin"
+        PENDING_REVIEW_ROOT.mkdir(parents=True, exist_ok=True)
+        (PENDING_REVIEW_ROOT / f"{qid}.{ext}").write_bytes(raw_bytes)
+        meta = {
+            "filename": req.filename,
+            "classification": classification,
+            "queued_at": datetime.now(timezone.utc).isoformat(),
+            "ext": ext,
+        }
+        (PENDING_REVIEW_ROOT / f"{qid}.json").write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        yield _sse(
+            {
+                "stage": "finished",
+                "result": {
+                    "status": "pending_review",
+                    "queue_id": qid,
+                    "reasoning": classification.get("reasoning", ""),
+                    "proposed": classification,
+                    "message": "Low classification confidence — queued for human review.",
+                },
+            }
+        )
+        return
+
+    yield _sse({"stage": "write", "status": "start", "label": "Zápis stránky do wiki"})
+    try:
+        destination_path, category, topic, agent_result = _write_and_finalize(
+            req.filename, raw_bytes, classification, content_for_llm
+        )
+    except Exception as e:
+        yield _sse({"stage": "write", "status": "error", "message": str(e)})
+        return
+    yield _sse({"stage": "write", "status": "done"})
+
+    yield _sse(
+        {
+            "stage": "finalize",
+            "status": "start",
+            "label": "Dokončování (hash, token count, manifest)",
+        }
+    )
+    try:
+        result = _finalize(destination_path, category, topic, raw_bytes, agent_result)
+    except Exception as e:
+        yield _sse({"stage": "finalize", "status": "error", "message": str(e)})
+        return
+    yield _sse({"stage": "finalize", "status": "done"})
+
+    yield _sse({"stage": "finished", "result": result})
+
+
 @app.post("/ingest")
 async def ingest(req: IngestRequest):
     async with _ingest_lock:
@@ -195,6 +352,19 @@ async def ingest(req: IngestRequest):
             raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/ingest/stream")
+async def ingest_stream(req: IngestRequest):
+    async def gen():
+        await _ingest_lock.acquire()
+        try:
+            for chunk in _ingest_pipeline(req):
+                yield chunk
+        finally:
+            _ingest_lock.release()
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+
 @app.get("/pending-review")
 def list_pending_review():
     items = []
@@ -222,7 +392,11 @@ async def approve_pending_review(queue_id: str, override: ReviewDecisionOverride
 
     async with _ingest_lock:
         try:
-            result = _run_full_ingest(meta["filename"], raw_bytes, classification)
+            content_for_llm = _build_llm_content(meta["filename"], base64.b64encode(raw_bytes).decode(), raw_bytes)
+            destination_path, category, topic, agent_result = _write_and_finalize(
+                meta["filename"], raw_bytes, classification, content_for_llm
+            )
+            result = _finalize(destination_path, category, topic, raw_bytes, agent_result)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
