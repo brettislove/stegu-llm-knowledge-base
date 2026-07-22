@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api } from "../api.js";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -92,7 +94,11 @@ export default function ChatPanel({ onCitedPaths }) {
               
               <div className="flex-1 space-y-2 overflow-hidden">
                 <div className="prose prose-sm dark:prose-invert max-w-none break-words leading-relaxed">
-                  <div className="whitespace-pre-wrap">{m.text}</div>
+                  {m.role === "agent" && !m.text.startsWith("Error:") ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown>
+                  ) : (
+                    <div className="whitespace-pre-wrap">{m.text}</div>
+                  )}
                 </div>
 
                 {m.role === "agent" && !m.text.startsWith("Error:") && (
