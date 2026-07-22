@@ -1,4 +1,14 @@
 {
+  "certifikace/prohlaseni-o-vlastnostech-stone-shine-dekorativni-a-ochranna-impregnace.md": {
+    "category": "certifikace",
+    "content_hash": "sha256:6348283c8adfa5a8a3955bcfd6fc48df5ec5fb0b24c06e12c0ffdc8c4949300f",
+    "id": "certifikace-prohlaseni-o-vlastnostech-stone-shine-dekorativni-a-ochranna-impregnace",
+    "layer": "source",
+    "parent": "root",
+    "title": "Prohlášení o vlastnostech – Stone Shine (dekorativní a ochranná impregnace)",
+    "token_count": 448,
+    "topic": ""
+  },
   "montaz-a-navody/montazni-navod-dekorativni-obklady-stegu.md": {
     "category": "montaz-a-navody",
     "content_hash": "sha256:51c0e68e1e17a6e91411ed10ca2ed0ebea6815912177c05fed3b505344092e01",
@@ -7,6 +17,16 @@
     "parent": "root",
     "title": "Montážní návod – dekorativní obklady STEGU",
     "token_count": 958,
+    "topic": ""
+  },
+  "pravo-a-admin/vseobecne-obchodni-podminky-decorstone-s-r-o-verze-25-01.md": {
+    "category": "pravo-a-admin",
+    "content_hash": "sha256:b1cddde69035ea12dd65700625ad4904bda113807d49b81bd7dbbbfbdb87ad41",
+    "id": "pravo-a-admin-vseobecne-obchodni-podminky-decorstone-s-r-o-verze-25-01",
+    "layer": "source",
+    "parent": "root",
+    "title": "Všeobecné obchodní podmínky DECORSTONE, s.r.o. (verze 25.01)",
+    "token_count": 829,
     "topic": ""
   }
 }
