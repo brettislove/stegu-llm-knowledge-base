@@ -178,7 +178,7 @@ export default function IngestPanel() {
           }}
           onClick={() => inputRef.current?.click()}
         >
-          Drop a document or data file here, or click to choose one
+          Přetáhněte soubor nebo klikněte pro výběr (povolené typy: {ACCEPTED_EXTENSIONS.join(", ")})
           <input
             ref={inputRef}
             type="file"
@@ -194,7 +194,7 @@ export default function IngestPanel() {
         </div>
 
         <Button className="mt-4" onClick={runIngest} disabled={!file || busy}>
-          {busy ? "Probíhá zpracování…" : "Ingest document"}
+          {busy ? "Probíhá zpracování…" : "Spustit zpracování"}
         </Button>
 
         {(busy || steps.some((s) => s.status !== "pending")) && (

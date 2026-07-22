@@ -69,7 +69,7 @@ def classify_document(filename: str, content_for_llm) -> dict:
     shape the ingest/writer agent expects.
 
     Returns the propose_classification tool's input dict, e.g.:
-    {"category": "products", "topic": "", "doc_type": "catalog",
+    {"category": "produkty", "topic": "", "doc_type": "catalog",
      "title": "...", "access": "public", "is_update_to": "",
      "confidence": "high", "reasoning": "..."}
     """
