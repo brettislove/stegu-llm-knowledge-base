@@ -1,48 +1,81 @@
 # SCHEMA.md — Knowledge Base Conventions
 
-This document defines how the wiki is structured and how agents (ingest, query,
-distill) are expected to read and write it. All agents receive this file as
-part of their system context on every call.
+This document defines how the wiki is structured and how agents (classify,
+ingest, query, distill, lint, split) are expected to read and write it. All
+agents receive this file as part of their system context on every call.
 
-## 1. Directory layout
+**Local MVP note:** this instance runs entirely on local disk under `wiki/`
+(no OneDrive/Graph API — that's the production-target design, not this test
+environment). Single-writer discipline is enforced with an in-process
+`asyncio.Lock` around ingestion instead of a cloud lock file.
 
-Top-level folders mirror `VALID_CATEGORY` exactly — one folder per document
-domain, not per "product vs. category" as in earlier drafts:
+## 1. Directory layout — variable depth
+
+Top-level folders mirror `VALID_CATEGORY` exactly:
 
 ```
 wiki/
-├── index.md              # catalog — one entry per page, kept short
-├── log.md                # append-only ingest history (facts: what changed, when)
-├── lessons.md            # curated standing rules from human feedback
-├── feedback_log.md       # raw flagged corrections, unprocessed until distilled
-├── installation/
-├── chemistry/
-├── products/
-├── complaints/
-├── logistics/
-├── business/
-├── general/
-├── pricing/
-└── internal_process/
+├── index.md               # root (Layer 1) catalog — kept short
+├── manifest.json           # system bookkeeping (id/hash/token_count/parent per page) — never hand-edited
+├── log.md                  # append-only ingest history
+├── lessons.md               # curated standing rules from human feedback
+├── feedback_log.md          # raw flagged corrections, unprocessed until distilled
+├── lint-report.md            # overwritten each lint run
+├── system/
+├── firma/
+├── produkty/
+├── ceniky-a-kalkulace/
+├── certifikace/
+├── montaz-a-navody/
+├── logistika/
+├── marketing/
+└── data-a-analyzy/
+└── nastroje/
+└── pravo-a-admin/
 ```
 
 ```python
 VALID_CATEGORY = {
-    "installation", "chemistry", "products", "complaints",
-    "logistics", "business", "general", "pricing", "internal_process",
+    "system", "firma", "produkty", "ceniky-a-kalkulace",
+    "certifikace", "montaz-a-navody", "logistika", "marketing",
+    "data-a-analyzy", "nastroje", "pravo-a-admin",
 }
 ```
 
-- `<slug>.md` files live directly inside their category folder, no further
-  nesting. `<slug>` is lowercase, hyphen-separated, derived from the page's
+**A category folder is either flat or split — never assume which:**
+
+- **Flat (2 layers):** `<category>/<slug>.md` files sit directly in the
+  category folder. This is the default and stays the default as long as the
+  category is small — most categories will likely never need anything else.
+- **Split (3 layers):** once a category crosses the split threshold (see
+  §1a), it gains topic subfolders: `<category>/<topic>/<slug>.md`, plus a
+  `<category>/_index.md` domain index and one `<topic>/_index.md` per topic.
+
+**How to tell which state a category is in:** check whether
+`<category>/_index.md` exists. If it does, the category is split and that
+file (not the root `index.md` section) is the authoritative list of what's
+in it. If it doesn't, the category is flat and its entries live directly in
+the root `index.md`. Same logic one level down for topics.
+
+- `<slug>.md` is lowercase, hyphen-separated, derived from the page's
   subject (e.g. `verona-basalt-tile.md`). Once assigned, a slug is never
   renamed — if a product is discontinued or renamed, update the page content
-  and add a redirect note (see §4), don't rename the file.
-- The distinction between e.g. "a specific product" and "a product family
-  overview" lives in `doc_type` (§2), not in the folder structure.
+  and add a redirect note (§4), don't rename the file.
+- `_index.md` is a reserved filename — never used as a regular page slug.
 - If a genuinely new top-level category is needed, that's a schema change —
-  flag it rather than inventing a folder silently, and add it to
-  `VALID_CATEGORY` in the ingestion code as well as here.
+  flag it rather than inventing a folder silently.
+
+### 1a. Split trigger (deterministic, not an LLM judgment call)
+
+A category or topic is flagged for splitting when it exceeds **both**:
+- more than ~45 files, **and**
+- an estimated total over ~3,000 tokens across those files' bodies.
+
+This check is computed mechanically from `manifest.json` (see §9) — never
+by an agent estimating it. When flagged, a human manually triggers the
+split process (`POST /split/{category}`) — splitting is not automatic in
+this MVP, matching the existing manual-trigger philosophy already used for
+lint and distillation.
 
 ## 2. Page format (products & categories)
 
@@ -50,207 +83,214 @@ Every page starts with YAML frontmatter, then free-form markdown body.
 
 ```markdown
 ---
+id: "products-verona-basalt-tile"
 title: "Verona Basalt Tile"
-category: products              # required, from VALID_CATEGORY
-doc_type: catalog                # required, from VALID_DOC_TYPE
-access: public                   # required: public | internal | restricted
-version: "2026-06"               # optional, human-readable label
-valid_from: 2026-06-01           # required
-valid_until: 2026-12-31          # optional — for docs that expire (certificates, price lists)
-last_updated: 2026-07-04         # set by agent, not copied from source
-source_docs:                     # relative paths under raw/, for traceability
+layer: source                    # source | domain | topic | root
+category: produkty               # required, from VALID_CATEGORY
+doc_type: catalog                 # required, from VALID_DOC_TYPE
+parent: "root"                    # id of the governing index (see §9)
+access: public                    # required: public | internal | restricted
+version: "2026-06"                # optional, human-readable label
+valid_from: 2026-06-01            # required
+valid_until: 2026-12-31           # optional — for docs that expire
+last_updated: 2026-07-04           # set by agent/system, not copied from source
+token_count: 842                   # set automatically after writing — do not set by hand
+content_hash: "sha256:..."          # set automatically — hash of the raw source file
+source_docs:                       # relative paths under raw/, for traceability
   - raw/catalogs/2026-outdoor-catalog.pdf
-status: active                   # optional — only meaningful when category: products
-                                  # active | discontinued | seasonal
+status: active                     # optional — only meaningful when category: products
+tags: ["basalt", "outdoor"]        # optional, free-form
 ---
 
 ## Summary
-One or two sentences — this is what gets pulled into index.md.
+One or two sentences — this is what gets pulled into the governing index.
 
 ## Details
-Specs, pricing, dimensions, finishes, whatever is relevant. Prefer bullet
-lists and tables over prose paragraphs — easier for the query agent to
-extract precisely.
+Specs, pricing, dimensions, finishes. Prefer bullet lists and tables.
 
 ## Notes
-Anything that doesn't fit above: known issues, common customer questions,
-discontinued-product redirects, etc.
+Known issues, common questions, discontinued-product redirects, etc.
 ```
 
 ```python
 VALID_DOC_TYPE = {
     "guide", "tech_sheet", "faq", "catalog", "policy", "certificate",
+    "index",  # domain/topic index files — added for the layered structure
 }
 ```
 
-Rules:
-- **Frontmatter fields are fixed.** Don't add ad hoc keys per page — if a new
-  field is genuinely needed across many pages, that's a schema change, add it
-  here first.
-- **`category` and `doc_type` are orthogonal.** `category` is the document's
-  domain (what it's about), `doc_type` is its form (what kind of document it
-  is). E.g. `chemistry` + `certificate`, `products` + `catalog`,
-  `installation` + `guide` are all valid combinations.
-- **`access` is a hard filter, not just metadata.** The query agent, when
-  drafting a customer-facing email reply, may only cite `public` pages.
-  `internal` and `restricted` pages are available to internal/dashboard
-  queries only — `restricted` additionally implies the page shouldn't be
-  quoted verbatim even internally without a human sign-off.
-- **`source_docs` is mandatory** and is how answers get traced back to a real
-  PDF. Every fact on a page should be attributable to at least one doc in this
-  list.
-- **`valid_from`/`valid_until`** determine whether a page is currently
-  authoritative. The query agent should treat a page past its `valid_until`
-  as stale and flag it rather than cite it as current.
-- **`last_updated` is set by the agent**, not copied from the source PDF.
+**System fields — set automatically, not by the writing agent:**
+`id`, `layer`, `parent`, `token_count`, `content_hash`. The ingest agent
+should leave these unset; a deterministic post-processing step fills them
+in immediately after the page is written (see §9). This mirrors the design
+principle that size/hash/hierarchy bookkeeping must be mechanical, not an
+LLM judgment call — the agent's job is the content, nothing else.
 
-## 3. index.md format
+**Everything else is unchanged from before:**
+- `category` and `doc_type` are orthogonal.
+- `access` is a hard filter, enforced by the query agent, not just metadata.
+- `source_docs` is mandatory and traces back to the real source file.
+- `valid_from`/`valid_until` determine current authority.
+- All human-facing content (titles, body, index entries, summaries shown to
+  a human operator) is written in **Czech**. Code-level values (category,
+  doc_type, access, layer, file paths) stay as their fixed English enum
+  values — that's the "programmatic stuff" that doesn't get translated.
 
-One line per page, generated/maintained by the ingest agent — never hand-edited.
+## 3. File pairing
 
-```markdown
-# Index
+Every page is stored **alongside its raw source file**, same folder, same
+basename — e.g. `products/verona-basalt-tile.md` +
+`products/verona-basalt-tile.pdf`. This is handled automatically (not by
+an agent): the backend saves the raw upload into the destination folder as
+soon as the destination path is decided, before the writer agent runs.
 
-## Products
-- [Verona Basalt Tile](products/verona-basalt-tile.md) — outdoor paving, active. Dark grey basalt, 60x60cm, from 1150 CZK/m².
-- [Verona Slate Tile](products/verona-slate-tile.md) — outdoor paving, DISCONTINUED, see Verona Basalt.
-
-## Categories
-- [Outdoor Paving](categories/outdoor-paving.md) — all outdoor tile products.
-```
-
-The query agent reads this file **first, always**, before opening any
-individual page. Keep each line short enough that the whole index stays cheap
-to read even as the catalog grows toward ~200 pages.
+- This is what lets a citation point to the actual original file for
+  verification, and lets `wiki/` double as a normal browsable folder tree.
+- Images: no OCR/vision pass — the page simply links to the image file.
+- If a page is later updated from a different source format (e.g. was a
+  `.docx`, now updated via `.pdf`), the old raw sibling is removed and
+  replaced — a page only ever has one raw source paired to it at a time.
 
 ## 4. Discontinued / renamed products
 
 Don't delete pages. Set `status: discontinued`, add a one-line redirect note
-in the page's Notes section and in its index.md entry (see example above). The
-query agent should surface the redirect rather than silently answering as if
-the product still exists.
+in Notes and in the governing index entry.
 
-## 5. log.md format
+## 5. Ingestion flow (see also §8, §9)
 
-Append-only, one entry per ingest run. Never edited or reordered.
+1. A new file arrives (`/ingest`, or approval of a pending-review item).
+2. **Hash check (deterministic, no LLM):** if the raw file's content hash
+   already matches an entry in `manifest.json`, this exact file is already
+   in the wiki — skip everything else and report "unchanged."
+3. **Classification (LLM, read-only):** the classify agent proposes
+   category / topic / doc_type / access / title / confidence /
+   is-this-an-update. It does not write anything.
+4. **Confidence gate (deterministic):**
+   - `confidence: low` → the raw file and proposed classification are
+     stored in a pending-review queue. Nothing is written to the wiki. A
+     human approves or rejects it later (`/pending-review`). Silent
+     misfiling is worse than a manual step at this scale — never guess past
+     this gate.
+   - `confidence: high` → proceed.
+5. **Write (LLM):** the ingest agent writes the page content, updates the
+   correct governing index entry, appends a `log.md` entry.
+6. **Finalize (deterministic, no LLM):** system frontmatter fields are
+   computed and patched in; `manifest.json` is updated; the split-trigger
+   check (§1a) runs and is reported if crossed.
 
-```markdown
-## 2026-07-04 — ingested 2026-outdoor-catalog.pdf
-- Created: products/verona-basalt-tile.md
-- Updated: products/verona-slate-tile.md (marked discontinued)
-- Updated: categories/outdoor-paving.md (added new entry)
-```
+## 6. Governing index format
 
-## 6. lessons.md format
-
-Curated, deduplicated, human-readable rules distilled from feedback. Read by
-**both** ingest and query agents on every call — a lesson can affect how
-future documents get ingested, not just how questions get answered.
-
-```markdown
-# Lessons
-
-## Pricing & content
-- Always quote prices in CZK, never EUR.
-- "Verona Slate" is discontinued — redirect to "Verona Basalt".
-
-## Tone & format
-- Keep email replies under ~150 words unless the customer asks for full specs.
-- Never promise delivery dates more precise than "2–3 weeks" without an explicit order reference.
-```
-
-Only the **distill agent** writes to this file. It must dedupe against
-existing lessons rather than appending near-duplicates — if a new correction
-overlaps an existing lesson, it edits/tightens that lesson instead of adding a
-new line.
-
-## 7. feedback_log.md format
-
-Raw, append-only, written directly by the backend on thumbs-down (no agent
-call). Only the distill agent reads and marks entries processed.
+One line per page, under a heading, inside whichever file currently
+governs that category/topic (root `index.md`, `<category>/_index.md`, or
+`<category>/<topic>/_index.md` — see §1). Never hand-edited.
 
 ```markdown
-## 2026-07-04 14:32 — status: unprocessed
-Q: "What's the price of the Verona Slate tile?"
-Bad answer: "€45/m²"
-Correction: "Prices are always in CZK. Should be 1150 CZK/m². Also Verona Slate is discontinued."
+- [Verona Basalt Tile](products/verona-basalt-tile.md) — outdoor paving, active. Dark grey basalt, 60x60cm, from 1150 CZK/m².
 ```
 
-After distillation, the backend (not the agent) flips `status: unprocessed`
-to `status: processed` — keeps the distill agent from re-processing on every
-run.
+The query agent always reads root `index.md` first, then follows links down
+into `_index.md` files as needed (the 3-step traversal, §8) — it never
+opens a page directly from the root index; it goes through whichever index
+level currently governs it.
 
-## 7.5 lint-report.md format
+## 7. log.md, lessons.md, feedback_log.md, lint-report.md
 
-Overwritten in full on every lint run — NOT append-only, unlike log.md and
-feedback_log.md. Only the lint agent writes here, and only here (see §8).
-
-```markdown
-# Lint Report — 2026-07-06
-
-## Orphan pages
-- No issues found.
-
-## Broken references
-- index.md links to products/verona-slate-tile.md, which is discontinued
-  but still present — not actually broken, listed for awareness.
-
-## Stale claims
-- pricing/2026-06-price-list.md has valid_until: 2026-06-30, which has
-  passed. Consider re-ingesting a current price list.
-
-## Missing provenance
-- No issues found.
-
-## Contradictions
-- No issues found.
-```
+Unchanged from the original schema:
+- `log.md` — append-only, one entry per ingest run.
+- `lessons.md` — curated, deduped rules; written only by the distill agent;
+  read by every agent on every call.
+- `feedback_log.md` — raw, append-only, written directly by the backend on
+  thumbs-down; only the distill agent reads/marks entries processed.
+- `lint-report.md` — overwritten in full each lint run.
 
 ## 8. Agent responsibilities
 
-**Ingest agent** (tools: `read_file`, `write_file`, `list_files`)
+**Classify agent** (tools: `read_file`, `list_files`, `list_dirs`, `grep` —
+read-only, proposes a destination via a structured `propose_classification`
+call, never writes)
 1. Read `lessons.md` and `index.md` for context.
-2. Read the new source markdown (converted from PDF).
-3. Decide: new page, or update to an existing page? (check index.md first)
-4. Write/update the page(s) following §2.
-5. Update `index.md` (§3).
-6. Append an entry to `log.md` (§5).
+2. Check whether the target category is already split (`list_dirs`) and,
+   if so, whether the document fits an existing topic — never invents a
+   new topic.
+3. Check whether this updates an existing page.
+4. Call `propose_classification` exactly once, including a confidence
+   level. Default to `low` whenever unsure.
 
-**Query agent** (tools: `read_file`, `list_files`, `grep` — read-only, no
-write access)
-1. Read `lessons.md` and `index.md`.
-2. Pick the 2–4 most relevant pages, read them.
-3. **If drafting a customer-facing email reply**, filter to `access: public`
-   pages only — never cite `internal` or `restricted` pages in that context.
-   Internal/dashboard queries may read `internal` pages, but `restricted`
-   pages should still surface with a note that human sign-off is needed
-   before quoting them.
-4. Check `valid_until` on any page used — if a page is past its validity date,
-   flag it as potentially stale instead of citing it as current fact.
-5. Answer, citing which page(s) the answer came from.
-6. If the answer touches a discontinued/redirected product, say so explicitly.
+**Ingest agent (writer)** (tools: `read_file`, `list_files`, `list_dirs`,
+`grep`, `write_file`, `append_log` — write access)
+1. Given an already-decided classification and an exact destination path,
+   write the page (content only — system fields are filled in afterward).
+2. Update the governing index entry (told explicitly which file to update).
+3. Append a `log.md` entry.
 
-**Distill agent** (tools: `read_file`, `write_file` — only on `lessons.md`,
-`feedback_log.md`, and product/category pages if a factual correction)
-1. Read unprocessed entries in `feedback_log.md`.
-2. Classify each: factual/content error vs. behavioral rule.
-3. Factual → correct the relevant page directly (update `last_updated`).
-4. Behavioral → merge into `lessons.md`, deduping.
-5. Signal which entries are processed (backend flips the status flag).
+**Query agent** (tools: `read_file`, `list_files`, `grep` — read-only)
+1. Read `lessons.md` and root `index.md`.
+2. **3-step traversal:** decide which category/topic indices are relevant
+   → open those (`_index.md` files, following links from the root) → read
+   only the 2-4 most relevant source pages.
+3. `access: public` filter enforced when `mode="public"` (customer email
+   drafts); `access: restricted` surfaced with a sign-off note for internal
+   queries.
+4. Check `valid_until`; flag stale pages instead of citing as current.
+5. Answer, citing page paths.
+
+**Distill agent** (tools: `read_file`, `write_file` — restricted to
+`lessons.md`, `feedback_log.md`, and page factual corrections) — unchanged
+responsibilities. Note: since a factual correction changes a page's body
+directly, `token_count` may go stale until the next deterministic refresh
+pass (run automatically after `/distill`).
 
 **Lint agent** (tools: `read_file`, `list_files`, `grep`, `write_file` —
-write access restricted to `lint-report.md` only, enforced in code, not just
-by prompt)
-1. Compare `index.md` against actual files on disk to find orphans/broken
-   references.
-2. Check frontmatter completeness and `valid_until` staleness per page.
-3. Look for cross-page contradictions on the same subject.
-4. Write the full report to `lint-report.md` (overwrite, not append).
-5. Fix nothing — report only. A human decides what to act on, likely via a
-   normal ingest/distill run or a manual edit.
+restricted to `lint-report.md`)
+Same five checks as before (orphan pages, broken references, stale claims,
+missing provenance, contradictions), plus a sixth:
 
-## 9. Open conventions (fill in as the project evolves)
+6. **TOKEN BUDGET** — categories/topics flagged by the deterministic
+   split-trigger check (§1a, precomputed and handed to the agent — it does
+   not calculate this itself). Report them; don't split them.
 
-- Tone/style guide for email replies (formal? friendly? company-specific phrasing?)
-- Language(s) supported
-- What counts as "relevant enough" to include in an email answer vs. deferring to a human
+**Split agent** (tools: `read_file`, `list_files`, `list_dirs`,
+`write_file`, `move_file` — manually triggered via `POST /split/{category}`,
+never automatic)
+1. Read every page in the flagged category.
+2. Propose 2-5 topic groupings (lowercase-hyphen slugs).
+3. Move each page (and its paired raw source) into its topic subfolder.
+4. Create a `_index.md` per topic and a `_index.md` for the category,
+   replacing the flat page list with short topic abstracts.
+5. Update root `index.md`'s section for that category down to a short
+   category abstract + link.
+
+## 9. manifest.json
+
+Not an agent-facing file — no agent reads or writes it directly (it's
+maintained by deterministic Python code, not exposed as a tool). Tracks,
+per page path: `id`, `layer`, `category`, `topic`, `parent`, `token_count`,
+`content_hash`, `title`. Used for: fast hash-based duplicate detection on
+ingest, fast split-trigger checks without re-reading every file body, and
+manifest → path lookups.
+
+## 10. Pending-review queue
+
+Not part of `wiki/` — lives in a separate `pending_review/` folder at the
+project root. Each queued item is a raw file plus a small JSON sidecar
+(`{id}.json`) recording the proposed classification and reasoning. Approving
+an item runs it through the same write/finalize steps as a normal
+high-confidence ingest; rejecting deletes both files. Nothing in the queue
+is ever included in query-agent traversal — it isn't part of the wiki until
+approved.
+
+## 11. Deletion
+
+`DELETE /wiki/file` removes a page and its paired raw source. By default it
+archives them to `archive/{timestamp}/...` rather than destroying them
+outright, and deterministically strips any now-dead reference to that path
+from every index file in the tree (root and any `_index.md` files) — no LLM
+involved in that cleanup step.
+
+## 12. Open conventions (fill in as the project evolves)
+
+- Tone/style guide for email replies.
+- Per-category retention policy for archived versions (currently: archive
+  everything, everywhere, by default).
+- What counts as "relevant enough" to include in an email answer vs.
+  deferring to a human.

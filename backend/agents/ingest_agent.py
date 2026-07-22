@@ -1,49 +1,55 @@
 """
-Ingest agent — takes an already-converted markdown source document (from
-your existing PDF-to-markdown step) and folds it into the wiki, per
-SCHEMA.md §8. Has write access.
-"""
-from typing import Optional
+Ingest agent (writer) — given an already-decided classification (from
+classify_agent.py) and an explicit destination path (resolved
+deterministically by main.py), writes the page content, updates the
+correct governing index (root / domain / topic — also resolved
+beforehand), and appends a log entry. Has write access.
 
+System bookkeeping fields (id, layer, parent, token_count, content_hash,
+last_updated) are NOT this agent's job — main.py patches those into the
+frontmatter automatically after this returns (see tools/postprocess.py),
+using deterministic hash/token-count logic. This agent only needs to get
+the CONTENT right.
+"""
 from backend.agentic_loop import run_agent_loop
 from backend.tools import file_tools
 from backend.tools.tool_defs import INGEST_TOOLS
 from backend.config import SCHEMA_PATH
 
-SYSTEM_PROMPT = """You are the ingest agent for a company knowledge base wiki (stone tiles and apparel company).
+SYSTEM_PROMPT = """You are the ingest agent (writer) for a company knowledge base wiki (stone tiles and cladding company).
 
-You will be given the content of one newly converted source document
-(originally a PDF). Fold its content into the wiki, following SCHEMA.md
-exactly (included below).
+Classification has already been decided (category, topic, doc_type, access,
+title — given below, along with the exact path to write to). Your job is
+only to write the page CONTENT and update the correct index — you do not
+re-decide where this belongs.
 
 Steps:
-1. Read lessons.md and index.md first, for context and standing rules.
-2. Decide whether this document updates an existing page or requires a new
-   one. Use list_files/grep on the relevant category folder to check before
-   assuming it's new.
-3. Write the page: full content, valid YAML frontmatter (category, doc_type,
-   access, valid_from, source_docs are all required — see SCHEMA.md §2).
-4. Update index.md to add or update the one-line entry for this page.
-5. Append one entry to log.md summarizing what changed.
+1. Write the page at the EXACT destination path given below (write_file).
+   Required frontmatter: title, category, doc_type, access, valid_from,
+   source_docs (see SCHEMA.md §2). Do NOT set id, layer, parent,
+   token_count, content_hash, or last_updated — those are filled in
+   automatically after you finish.
+2. Update the given "governing index" file — add or update the one-line
+   entry for this page under the right heading (create the heading if it
+   doesn't exist yet).
+3. Append one entry to log.md summarizing what changed (same style as
+   existing entries: "Created:"/"Updated:" bullets).
 
-Efficiency: whenever multiple steps don't depend on each other's results,
-request them as multiple tool calls in the SAME turn rather than one at a
-time. For example, reading lessons.md, index.md, and listing the relevant
-category folder are all independent — request all three together in your
-first turn. Likewise, once you know the page content, index update, and log
-entry, you can write all three in one turn rather than three separate ones.
-Only sequence calls when a later one genuinely needs an earlier one's result
-(e.g. you can't write the page before deciding what it should say).
+All USER-FACING CONTENT — page title, page body, index entries, and log
+descriptions — must be written in CZECH. Code-level values (doc_type,
+access, file paths) stay as their fixed English enum values.
+
+Efficiency: once you know the page content, the index update, and the log
+entry, request all three write/append calls in the SAME turn rather than
+one at a time.
 
 Rules:
-- category must be one of VALID_CATEGORY. doc_type must be one of VALID_DOC_TYPE.
-- Never delete a page. If a product is discontinued, set status: discontinued
-  on the products page and add a redirect note instead of removing it.
 - write_file always takes the FULL file content — never a partial diff.
-- If lessons.md contains a rule relevant to this document (e.g. a pricing
-  correction, a discontinued product), apply it during ingestion.
-- When finished, reply with a short plain-text summary of what you did. This
-  summary is shown to a human operator, not stored in the wiki.
+- Never delete a page. If a product is discontinued, set
+  status: discontinued and add a redirect note instead of removing it.
+- If lessons.md contains a rule relevant to this document, apply it.
+- When finished, reply with a short summary IN CZECH of what you did — this
+  is shown to a human operator, not stored in the wiki.
 
 --- SCHEMA.md ---
 {schema}
@@ -55,6 +61,8 @@ def _dispatch(tool_name: str, tool_input: dict) -> str:
         return file_tools.read_file(tool_input["path"])
     if tool_name == "list_files":
         return "\n".join(file_tools.list_files(tool_input.get("subdir", ""))) or "(no files)"
+    if tool_name == "list_dirs":
+        return "\n".join(file_tools.list_dirs(tool_input.get("subdir", ""))) or "(no subfolders)"
     if tool_name == "grep":
         return "\n".join(file_tools.grep(tool_input["pattern"], tool_input.get("subdir", ""))) or "(no matches)"
     if tool_name == "write_file":
@@ -64,45 +72,32 @@ def _dispatch(tool_name: str, tool_input: dict) -> str:
     raise ValueError(f"Unknown tool for ingest agent: {tool_name}")
 
 
-def ingest_document(filename: str, pdf_base64: Optional[str] = None, markdown: Optional[str] = None) -> dict:
-    """
-    Exactly one of pdf_base64 / markdown should be provided.
-
-    pdf_base64: raw PDF, base64-encoded — Claude reads it natively via the
-    document content type, no separate conversion step needed.
-
-    markdown: already-converted markdown (e.g. from an existing pipeline, or
-    a source that was never a PDF to begin with). Sent as plain text.
-    """
-    if bool(pdf_base64) == bool(markdown):
-        raise ValueError("Provide exactly one of pdf_base64 or markdown, not both/neither.")
-
+def write_page(
+    filename: str,
+    content_for_llm,
+    destination_path: str,
+    governing_index_path: str,
+    classification: dict,
+) -> dict:
     schema_text = SCHEMA_PATH.read_text(encoding="utf-8")
     system_prompt = SYSTEM_PROMPT.format(schema=schema_text)
 
-    if pdf_base64:
-        user_message = [
-            {
-                "type": "document",
-                "source": {
-                    "type": "base64",
-                    "media_type": "application/pdf",
-                    "data": pdf_base64,
-                },
-            },
-            {
-                "type": "text",
-                "text": (
-                    f"New source document: {filename}\n\n"
-                    f"Read this PDF and fold its content into the wiki, following "
-                    f"the steps and SCHEMA.md above."
-                ),
-            },
-        ]
-    else:
-        user_message = (
-            f"New source document: {filename}\n\n"
-            f"--- Document content (already converted to markdown) ---\n{markdown}"
-        )
+    instructions = (
+        f"New source document: {filename}\n\n"
+        f"Decided classification (already approved, do not change it):\n"
+        f"- category: {classification['category']}\n"
+        f"- topic: {classification.get('topic') or '(none)'}\n"
+        f"- doc_type: {classification['doc_type']}\n"
+        f"- title: {classification['title']}\n"
+        f"- access: {classification['access']}\n"
+        f"- is_update_to: {classification.get('is_update_to') or '(new page)'}\n\n"
+        f"Exact path to write the page to: {destination_path}\n"
+        f"Index file to update: {governing_index_path}\n\n"
+    )
 
-    return run_agent_loop(system_prompt, user_message, INGEST_TOOLS, _dispatch)
+    if isinstance(content_for_llm, list):
+        user_content = content_for_llm + [{"type": "text", "text": instructions}]
+    else:
+        user_content = instructions + f"--- Document content ---\n{content_for_llm}"
+
+    return run_agent_loop(system_prompt, user_content, INGEST_TOOLS, _dispatch)

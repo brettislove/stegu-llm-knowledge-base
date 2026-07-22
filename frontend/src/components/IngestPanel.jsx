@@ -87,7 +87,7 @@ export default function IngestPanel() {
         </div>
 
         <Button className="mt-4" onClick={runIngest} disabled={!file || busy}>
-          {busy ? "Ingesting…" : "Ingest document"}
+          {busy ? "Zpracovávám…" : "Spustit zpracování"}
         </Button>
 
         {error && (

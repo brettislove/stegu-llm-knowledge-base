@@ -3,25 +3,25 @@
 This file is maintained by the ingest agent — do not hand-edit. One line per
 page, grouped by category.
 
-## Products
-- [Verona Basalt Tile](products/verona-basalt-tile.md) — outdoor paving, active. Dark grey basalt, 60x60cm, 1150 CZK/m².
+## Ceniky a kalkulace
 
-## Installation
-- [Montážní návod — obklady a dlažby STEGU](installation/montazni-navod-stegu-obklady.md) — příprava podkladu, lepení, spárování, impregnace obkladů a pokládka venkovních dlažeb STEGU; záruka jen při použití chemie STEGU.
+## Certifikace
 
-## Chemistry
-- [Stavební chemie STEGU — přehled produktů](chemistry/stegu-stavebni-chemie.md) — penetrace, lepidla, spárovací malty a impregnace STEGU s balením a vydatností.
+## Data a analýzy
 
-## Complaints
+## Firma
 
-## Logistics
+## Logistika
 
-## Business
-- [Všeobecné obchodní podmínky — DECORSTONE, s.r.o. (STEGU)](business/obchodni-podminky-stegu.md) — VOP v25.01, platné od 16.7.2025: objednávky, dodání, ceny palet/dopravy, platební podmínky, reklamace, práva spotřebitele.
-- [Cíle a strategie 2026](business/cile-a-strategie-2026.md) — RESTRICTED, interní. Růstové páky (velkoobchod + e-shop), brzdy růstu, cenové hladiny, cíle e-shopu 2026 (obrat 10M Kč, 1000 objednávek).
+## Marketing
 
-## General
+## Montáž a návody
+- [Montážní návod – dekorativní obklady STEGU](montaz-a-navody/montazni-navod-dekorativni-obklady-stegu.md) — postup lepení, spárování a impregnace dekorativních obkladů STEGU, doporučená stavební chemie a nářadí.
 
-## Pricing
+## Nástroje
 
-## Internal Process
+## Právo a admin
+
+## Produkty
+
+## Systém

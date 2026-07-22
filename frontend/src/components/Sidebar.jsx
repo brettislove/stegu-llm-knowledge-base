@@ -5,15 +5,17 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
 const CATEGORIES = [
-  "products",
-  "pricing",
-  "installation",
-  "chemistry",
-  "complaints",
-  "logistics",
-  "business",
-  "general",
-  "internal_process",
+  "system",
+  "firma",
+  "produkty",
+  "ceniky-a-kalkulace",
+  "certifikace",
+  "montaz-a-navody",
+  "logistika",
+  "marketing",
+  "data-a-analyzy",
+  "nastroje",
+  "pravo-a-admin",
 ];
 
 const TABS = [

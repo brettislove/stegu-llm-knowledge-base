@@ -3,22 +3,6 @@
 Append-only. Maintained by the ingest agent.
 
 
-## 2026-01-01 — ingested test-verona.md
-- Created: products/verona-basalt-tile.md
-- Updated: index.md (added Verona Basalt Tile entry)
 
-
-## 2026-06-01 — ingested montazni-navod.md
-- Created: installation/montazni-navod-stegu-obklady.md (montážní návod pro obklady a dlažby STEGU — příprava podkladu, lepení, spárování, impregnace, venkovní dlažby)
-- Created: chemistry/stegu-stavebni-chemie.md (přehled stavební chemie STEGU — balení a vydatnost)
-- Updated: index.md (added Installation and Chemistry entries)
-
-
-## 2025-07-16 — ingested vseobecne-obchodni-podminky.pdf
-- Created: business/obchodni-podminky-stegu.md (VOP v25.01, DECORSTONE s.r.o./STEGU terms and conditions — ordering, delivery, pallet pricing, payment terms, complaints, consumer rights)
-- Updated: index.md (added Business category entry)
-
-
-## 2026-06-12 — ingested cile-a-strategie.md
-- Created: business/cile-a-strategie-2026.md (access: restricted) — 2026 growth strategy: wholesale vs. e-shop priorities, growth blockers, pricing-tier initiative, e-shop 2026 KPI targets, strategic priorities from v6 dataset.
-- Updated: index.md (added Business entry for new strategy page)
+## 2026-xx-xx — Ingest
+- Created: `montaz-a-navody/montazni-navod-dekorativni-obklady-stegu.md` — nový montážní návod pro dekorativní obklady STEGU (příprava podkladu, lepení, spárování, impregnace, doporučená stavební chemie a nářadí). Kategorie montaz-a-navody je zatím plochá (bez _index.md), zápis proveden do root `index.md`.
