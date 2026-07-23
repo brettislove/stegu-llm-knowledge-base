@@ -10,6 +10,7 @@ refresh — main.py calls tools/postprocess.py:refresh_token_counts() right
 after run_distillation() returns, so this agent doesn't need to worry about
 it.
 """
+
 from backend.agentic_loop import run_agent_loop
 from backend.tools import file_tools
 from backend.tools.tool_defs import DISTILL_TOOLS
@@ -54,7 +55,10 @@ def _dispatch(tool_name: str, tool_input: dict) -> str:
     if tool_name == "read_file":
         return file_tools.read_file(tool_input["path"])
     if tool_name == "list_files":
-        return "\n".join(file_tools.list_files(tool_input.get("subdir", ""))) or "(no files)"
+        return (
+            "\n".join(file_tools.list_files(tool_input.get("subdir", "")))
+            or "(no files)"
+        )
     if tool_name == "write_file":
         path = tool_input["path"]
         if path == "index.md" or path.endswith("_index.md") or path == "log.md":
@@ -67,7 +71,9 @@ def _dispatch(tool_name: str, tool_input: dict) -> str:
 
 
 def run_distillation() -> dict:
-    schema_text = SCHEMA_PATH.read_text(encoding="utf-8")
+    # SCHEMA_PATH is a OneDrive path string now, not a local Path — reading
+    # it means a real Graph network call (see file_tools.read_project_file).
+    schema_text = file_tools.read_project_file(SCHEMA_PATH)
     system_prompt = SYSTEM_PROMPT.format(schema=schema_text)
     user_message = "Process all unprocessed entries in feedback_log.md now."
     return run_agent_loop(system_prompt, user_message, DISTILL_TOOLS, _dispatch)

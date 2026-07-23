@@ -9,6 +9,7 @@ Confidence gating happens here: if the agent isn't confident, main.py routes
 the document to a pending-review queue instead of guessing. Silent
 misfiling is worse than a manual step at this scale (Design Notes).
 """
+
 from backend.agentic_loop import client
 from backend.config import MODEL, SCHEMA_PATH
 from backend.tools import file_tools
@@ -54,11 +55,22 @@ def _dispatch(tool_name: str, tool_input: dict) -> str:
     if tool_name == "read_file":
         return file_tools.read_file(tool_input["path"])
     if tool_name == "list_files":
-        return "\n".join(file_tools.list_files(tool_input.get("subdir", ""))) or "(no files)"
+        return (
+            "\n".join(file_tools.list_files(tool_input.get("subdir", "")))
+            or "(no files)"
+        )
     if tool_name == "list_dirs":
-        return "\n".join(file_tools.list_dirs(tool_input.get("subdir", ""))) or "(no subfolders)"
+        return (
+            "\n".join(file_tools.list_dirs(tool_input.get("subdir", "")))
+            or "(no subfolders)"
+        )
     if tool_name == "grep":
-        return "\n".join(file_tools.grep(tool_input["pattern"], tool_input.get("subdir", ""))) or "(no matches)"
+        return (
+            "\n".join(
+                file_tools.grep(tool_input["pattern"], tool_input.get("subdir", ""))
+            )
+            or "(no matches)"
+        )
     raise ValueError(f"Unknown tool for classify agent: {tool_name}")
 
 
@@ -73,14 +85,21 @@ def classify_document(filename: str, content_for_llm) -> dict:
      "title": "...", "access": "public", "is_update_to": "",
      "confidence": "high", "reasoning": "..."}
     """
-    schema_text = SCHEMA_PATH.read_text(encoding="utf-8")
+    # SCHEMA_PATH is a OneDrive path string (Graph-backed), not a local
+    # Path — reading it means a real network call via graph_client, done
+    # here through file_tools.read_project_file (SCHEMA.md lives at the
+    # project root, one level above WIKI_ROOT, so it can't go through
+    # read_file()'s wiki-relative path handling).
+    schema_text = file_tools.read_project_file(SCHEMA_PATH)
     system_prompt = SYSTEM_PROMPT.format(schema=schema_text)
 
     if isinstance(content_for_llm, list):
-        user_content = content_for_llm + [{
-            "type": "text",
-            "text": f"New source document: {filename}\n\nDecide where it belongs.",
-        }]
+        user_content = content_for_llm + [
+            {
+                "type": "text",
+                "text": f"New source document: {filename}\n\nDecide where it belongs.",
+            }
+        ]
     else:
         user_content = (
             f"New source document: {filename}\n\n"
@@ -90,7 +109,9 @@ def classify_document(filename: str, content_for_llm) -> dict:
 
     messages = [{"role": "user", "content": user_content}]
 
-    cached_system = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
+    cached_system = [
+        {"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}
+    ]
     cached_tools = [dict(t) for t in CLASSIFY_TOOLS]
     cached_tools[-1] = {**cached_tools[-1], "cache_control": {"type": "ephemeral"}}
 
@@ -106,7 +127,11 @@ def classify_document(filename: str, content_for_llm) -> dict:
         messages.append({"role": "assistant", "content": assistant_content})
 
         classification_block = next(
-            (b for b in response.content if b.type == "tool_use" and b.name == "propose_classification"),
+            (
+                b
+                for b in response.content
+                if b.type == "tool_use" and b.name == "propose_classification"
+            ),
             None,
         )
         if classification_block:
@@ -129,12 +154,14 @@ def classify_document(filename: str, content_for_llm) -> dict:
             except Exception as e:
                 result = f"Error: {e}"
                 is_error = True
-            tool_results.append({
-                "type": "tool_result",
-                "tool_use_id": block.id,
-                "content": result,
-                "is_error": is_error,
-            })
+            tool_results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result,
+                    "is_error": is_error,
+                }
+            )
         messages.append({"role": "user", "content": tool_results})
 
     raise RuntimeError("Classify agent exceeded max turns without a decision.")

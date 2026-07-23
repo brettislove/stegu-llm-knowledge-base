@@ -10,6 +10,7 @@ Manually triggered rather than automatic, matching this MVP's existing
 philosophy for higher-risk maintenance actions (same as lint/distill — no
 cron, a human decides when to run it).
 """
+
 from backend.agentic_loop import run_agent_loop
 from backend.tools import file_tools, frontmatter
 from backend.tools.tool_defs import SPLIT_TOOLS
@@ -57,9 +58,15 @@ def _dispatch(tool_name: str, tool_input: dict) -> str:
     if tool_name == "read_file":
         return file_tools.read_file(tool_input["path"])
     if tool_name == "list_files":
-        return "\n".join(file_tools.list_files(tool_input.get("subdir", ""))) or "(no files)"
+        return (
+            "\n".join(file_tools.list_files(tool_input.get("subdir", "")))
+            or "(no files)"
+        )
     if tool_name == "list_dirs":
-        return "\n".join(file_tools.list_dirs(tool_input.get("subdir", ""))) or "(no subfolders)"
+        return (
+            "\n".join(file_tools.list_dirs(tool_input.get("subdir", "")))
+            or "(no subfolders)"
+        )
     if tool_name == "write_file":
         return file_tools.write_file(tool_input["path"], tool_input["content"])
     if tool_name == "move_file":
@@ -68,9 +75,13 @@ def _dispatch(tool_name: str, tool_input: dict) -> str:
 
 
 def split_category(category: str) -> dict:
-    schema_text = SCHEMA_PATH.read_text(encoding="utf-8")
+    # SCHEMA_PATH is a OneDrive path string now, not a local Path — reading
+    # it means a real Graph network call (see file_tools.read_project_file).
+    schema_text = file_tools.read_project_file(SCHEMA_PATH)
     system_prompt = SYSTEM_PROMPT.format(category=category, schema=schema_text)
-    user_message = f"Split category '{category}' into topic subfolders per the instructions above."
+    user_message = (
+        f"Split category '{category}' into topic subfolders per the instructions above."
+    )
     result = run_agent_loop(system_prompt, user_message, SPLIT_TOOLS, _dispatch)
     _refresh_manifest_for_category(category)
     return result

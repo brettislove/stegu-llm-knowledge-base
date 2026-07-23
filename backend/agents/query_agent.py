@@ -5,6 +5,7 @@ to do. Used both for the dashboard chat (mode="internal") and for drafting
 customer email replies (mode="public"), which differ only in which
 access levels may be cited.
 """
+
 from backend.agentic_loop import run_agent_loop
 from backend.tools import file_tools
 from backend.tools.tool_defs import QUERY_TOOLS
@@ -66,16 +67,26 @@ def _dispatch(tool_name: str, tool_input: dict) -> str:
     if tool_name == "read_file":
         return file_tools.read_file(tool_input["path"])
     if tool_name == "list_files":
-        return "\n".join(file_tools.list_files(tool_input.get("subdir", ""))) or "(no files)"
+        return (
+            "\n".join(file_tools.list_files(tool_input.get("subdir", "")))
+            or "(no files)"
+        )
     if tool_name == "grep":
-        return "\n".join(file_tools.grep(tool_input["pattern"], tool_input.get("subdir", ""))) or "(no matches)"
+        return (
+            "\n".join(
+                file_tools.grep(tool_input["pattern"], tool_input.get("subdir", ""))
+            )
+            or "(no matches)"
+        )
     raise ValueError(f"Unknown tool for query agent: {tool_name}")
 
 
 def answer_query(question: str, mode: str = "internal") -> dict:
     if mode not in {"internal", "public"}:
         raise ValueError("mode must be 'internal' or 'public'")
-    schema_text = SCHEMA_PATH.read_text(encoding="utf-8")
+    # SCHEMA_PATH is a OneDrive path string now, not a local Path — reading
+    # it means a real Graph network call (see file_tools.read_project_file).
+    schema_text = file_tools.read_project_file(SCHEMA_PATH)
     access_rule = PUBLIC_RULE if mode == "public" else INTERNAL_RULE
     system_prompt = SYSTEM_PROMPT.format(access_rule=access_rule, schema=schema_text)
     return run_agent_loop(system_prompt, question, QUERY_TOOLS, _dispatch)

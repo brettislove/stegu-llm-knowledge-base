@@ -1,18 +1,27 @@
 """
-FastAPI backend for the knowledge base MVP — local/test version of the
-layered-index design (see SCHEMA.md and the Design Notes). Runs entirely
-against local disk (wiki/, pending_review/, archive/) — no OneDrive/Graph
-API, that's the production-target design, not this environment.
+FastAPI backend for the knowledge base MVP — OneDrive-backed version of the
+layered-index design (see SCHEMA.md and the Design Notes). Runs against a
+business OneDrive drive via Microsoft Graph (wiki/, pending_review/,
+archive/) instead of local disk — see graph_client.py / config.py for the
+Graph plumbing.
+
+Every route, request model, and public function name is unchanged from
+the local-disk version. What changed internally: anywhere the old code
+did direct pathlib.Path operations (mkdir/glob/write_bytes/unlink/read_text)
+against WIKI_ROOT or PENDING_REVIEW_ROOT, this version calls the
+corresponding file_tools.py function instead, so there's exactly one call
+site per filesystem-shaped operation and main.py doesn't carry its own
+parallel set of graph_client calls.
 
 Run from the project root with:
     uvicorn backend.main:app --reload --port 8000
 """
+
 import asyncio
 import base64
 import json
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
@@ -29,20 +38,29 @@ from backend.agents.split_agent import split_category
 from backend.tools import file_tools, hashing
 from backend.tools.postprocess import finalize_page, refresh_token_counts
 from backend.converters import convert_file
-from backend.config import PENDING_REVIEW_ROOT, WIKI_ROOT, VALID_CATEGORY
+from backend.config import VALID_CATEGORY
 
 app = FastAPI(title="Knowledge Base MVP")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # fine for local MVP testing; tighten before any real deployment
+    allow_origins=[
+        "*"
+    ],  # fine for local MVP testing; tighten before any real deployment
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Single-writer discipline (Design Notes §6.1), adapted for a single local
+# Single-writer discipline (Design Notes §6.1), adapted for a single
 # process: one asyncio.Lock instead of a cloud lock file — avoids two
-# concurrent uploads racing to edit the same index file.
+# concurrent uploads racing to edit the same index file. This was already
+# just a same-process guard, not a cross-process/cross-machine lock, so
+# moving to OneDrive as the backend doesn't change its guarantees one way
+# or the other — it's still only safe as long as there's one backend
+# process. If you ever run multiple backend instances against the same
+# OneDrive drive, this in-memory lock stops being sufficient and you'd
+# need a real distributed lock (e.g. a lock file in OneDrive with
+# conflict-behavior=fail, or a database row lock).
 _ingest_lock = asyncio.Lock()
 
 
@@ -81,25 +99,18 @@ def _resolve_destination(classification: dict) -> str:
     return f"{prefix}{slug}.md"
 
 
-def _store_raw_sibling(destination_path: str, filename: str, raw_bytes: bytes) -> None:
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
-    dest_dir = (WIKI_ROOT / destination_path).parent
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    stem = Path(destination_path).stem
-    # Remove any stale raw sibling with a different extension (e.g. this
-    # update switched source format from .docx to .pdf).
-    for sibling in dest_dir.glob(f"{stem}.*"):
-        if sibling.suffix != ".md":
-            sibling.unlink()
-    (dest_dir / f"{stem}.{ext}").write_bytes(raw_bytes)
-
-
 def _build_llm_content(filename: str, file_base64: str, raw_bytes: bytes):
     if filename.lower().endswith(".pdf"):
-        return [{
-            "type": "document",
-            "source": {"type": "base64", "media_type": "application/pdf", "data": file_base64},
-        }]
+        return [
+            {
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": file_base64,
+                },
+            }
+        ]
     _, markdown = convert_file(filename, file_base64)
     return markdown
 
@@ -115,9 +126,11 @@ def _run_full_ingest(filename: str, raw_bytes: bytes, classification: dict) -> d
     topic = classification.get("topic") or None
     governing_index = file_tools.governing_index_path(category, topic)
 
-    _store_raw_sibling(destination_path, filename, raw_bytes)
+    file_tools.store_raw_sibling(destination_path, filename, raw_bytes)
 
-    result = write_page(filename, content_for_llm, destination_path, governing_index, classification)
+    result = write_page(
+        filename, content_for_llm, destination_path, governing_index, classification
+    )
 
     raw_hash = hashing.compute_hash_bytes(raw_bytes)
     finalize_page(destination_path, category, topic, raw_hash)
@@ -150,7 +163,7 @@ def _write_and_finalize(filename, raw_bytes, classification, content_for_llm):
     topic = classification.get("topic") or None
     governing_index = file_tools.governing_index_path(category, topic)
 
-    _store_raw_sibling(destination_path, filename, raw_bytes)
+    file_tools.store_raw_sibling(destination_path, filename, raw_bytes)
     result = write_page(
         filename, content_for_llm, destination_path, governing_index, classification
     )
@@ -175,6 +188,33 @@ def _finalize(destination_path, category, topic, raw_bytes, result):
         "turns": result["turns"],
         "cache_read_tokens": result.get("cache_read_tokens", 0),
         "split_hint": split_hint,
+    }
+
+
+def _queue_for_review(filename: str, raw_bytes: bytes, classification: dict) -> dict:
+    """Shared low-confidence path used by both /ingest and /ingest/stream.
+    Writes the raw upload + a JSON metadata sidecar into pending_review/
+    via file_tools' pending-review helpers (Graph-backed), instead of the
+    old direct PENDING_REVIEW_ROOT.mkdir()/.write_bytes()/.write_text()."""
+    qid = uuid.uuid4().hex[:12]
+    ext = filename.rsplit(".", 1)[-1] if "." in filename else "bin"
+    file_tools.pending_review_write(f"{qid}.{ext}", raw_bytes)
+    meta = {
+        "filename": filename,
+        "classification": classification,
+        "queued_at": datetime.now(timezone.utc).isoformat(),
+        "ext": ext,
+    }
+    file_tools.pending_review_write(
+        f"{qid}.json",
+        json.dumps(meta, ensure_ascii=False, indent=2).encode("utf-8"),
+    )
+    return {
+        "status": "pending_review",
+        "queue_id": qid,
+        "reasoning": classification.get("reasoning", ""),
+        "proposed": classification,
+        "message": "Low classification confidence — queued for human review (GET /pending-review).",
     }
 
 
@@ -242,31 +282,8 @@ def _ingest_pipeline(req: IngestRequest):
     )
 
     if classification.get("confidence") == "low":
-        qid = uuid.uuid4().hex[:12]
-        ext = req.filename.rsplit(".", 1)[-1] if "." in req.filename else "bin"
-        PENDING_REVIEW_ROOT.mkdir(parents=True, exist_ok=True)
-        (PENDING_REVIEW_ROOT / f"{qid}.{ext}").write_bytes(raw_bytes)
-        meta = {
-            "filename": req.filename,
-            "classification": classification,
-            "queued_at": datetime.now(timezone.utc).isoformat(),
-            "ext": ext,
-        }
-        (PENDING_REVIEW_ROOT / f"{qid}.json").write_text(
-            json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        yield _sse(
-            {
-                "stage": "finished",
-                "result": {
-                    "status": "pending_review",
-                    "queue_id": qid,
-                    "reasoning": classification.get("reasoning", ""),
-                    "proposed": classification,
-                    "message": "Low classification confidence — queued for human review.",
-                },
-            }
-        )
+        result = _queue_for_review(req.filename, raw_bytes, classification)
+        yield _sse({"stage": "finished", "result": result})
         return
 
     yield _sse({"stage": "write", "status": "start", "label": "Zápis stránky do wiki"})
@@ -315,7 +332,9 @@ async def ingest(req: IngestRequest):
             }
 
         try:
-            content_for_llm = _build_llm_content(req.filename, req.file_base64, raw_bytes)
+            content_for_llm = _build_llm_content(
+                req.filename, req.file_base64, raw_bytes
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -325,26 +344,7 @@ async def ingest(req: IngestRequest):
             raise HTTPException(status_code=500, detail=f"Classification failed: {e}")
 
         if classification.get("confidence") == "low":
-            qid = uuid.uuid4().hex[:12]
-            ext = req.filename.rsplit(".", 1)[-1] if "." in req.filename else "bin"
-            PENDING_REVIEW_ROOT.mkdir(parents=True, exist_ok=True)
-            (PENDING_REVIEW_ROOT / f"{qid}.{ext}").write_bytes(raw_bytes)
-            meta = {
-                "filename": req.filename,
-                "classification": classification,
-                "queued_at": datetime.now(timezone.utc).isoformat(),
-                "ext": ext,
-            }
-            (PENDING_REVIEW_ROOT / f"{qid}.json").write_text(
-                json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            return {
-                "status": "pending_review",
-                "queue_id": qid,
-                "reasoning": classification.get("reasoning", ""),
-                "proposed": classification,
-                "message": "Low classification confidence — queued for human review (GET /pending-review).",
-            }
+            return _queue_for_review(req.filename, raw_bytes, classification)
 
         try:
             return _run_full_ingest(req.filename, raw_bytes, classification)
@@ -368,51 +368,56 @@ async def ingest_stream(req: IngestRequest):
 @app.get("/pending-review")
 def list_pending_review():
     items = []
-    if PENDING_REVIEW_ROOT.exists():
-        for meta_path in sorted(PENDING_REVIEW_ROOT.glob("*.json")):
-            items.append({"id": meta_path.stem, **json.loads(meta_path.read_text(encoding="utf-8"))})
+    for meta_name in file_tools.pending_review_list_json():
+        qid = meta_name[: -len(".json")]
+        meta = json.loads(file_tools.pending_review_read_text(meta_name))
+        items.append({"id": qid, **meta})
     return {"items": items}
 
 
 @app.post("/pending-review/{queue_id}/approve")
-async def approve_pending_review(queue_id: str, override: ReviewDecisionOverride = ReviewDecisionOverride()):
-    meta_path = PENDING_REVIEW_ROOT / f"{queue_id}.json"
-    if not meta_path.exists():
+async def approve_pending_review(
+    queue_id: str, override: ReviewDecisionOverride = ReviewDecisionOverride()
+):
+    if not file_tools.pending_review_exists(f"{queue_id}.json"):
         raise HTTPException(status_code=404, detail="Unknown pending-review item.")
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta = json.loads(file_tools.pending_review_read_text(f"{queue_id}.json"))
     classification = meta["classification"]
     for key, value in override.model_dump(exclude_none=True).items():
         classification[key] = value
     classification["confidence"] = "high"  # a human approved it
 
-    raw_path = PENDING_REVIEW_ROOT / f"{queue_id}.{meta['ext']}"
-    if not raw_path.exists():
+    raw_name = f"{queue_id}.{meta['ext']}"
+    if not file_tools.pending_review_exists(raw_name):
         raise HTTPException(status_code=404, detail="Queued raw file missing.")
-    raw_bytes = raw_path.read_bytes()
+    raw_bytes = file_tools.pending_review_read_bytes(raw_name)
 
     async with _ingest_lock:
         try:
-            content_for_llm = _build_llm_content(meta["filename"], base64.b64encode(raw_bytes).decode(), raw_bytes)
+            content_for_llm = _build_llm_content(
+                meta["filename"], base64.b64encode(raw_bytes).decode(), raw_bytes
+            )
             destination_path, category, topic, agent_result = _write_and_finalize(
                 meta["filename"], raw_bytes, classification, content_for_llm
             )
-            result = _finalize(destination_path, category, topic, raw_bytes, agent_result)
+            result = _finalize(
+                destination_path, category, topic, raw_bytes, agent_result
+            )
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    raw_path.unlink(missing_ok=True)
-    meta_path.unlink(missing_ok=True)
+    file_tools.pending_review_delete(raw_name, missing_ok=True)
+    file_tools.pending_review_delete(f"{queue_id}.json", missing_ok=True)
     return result
 
 
 @app.post("/pending-review/{queue_id}/reject")
 def reject_pending_review(queue_id: str):
-    meta_path = PENDING_REVIEW_ROOT / f"{queue_id}.json"
-    if not meta_path.exists():
+    if not file_tools.pending_review_exists(f"{queue_id}.json"):
         raise HTTPException(status_code=404, detail="Unknown pending-review item.")
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    (PENDING_REVIEW_ROOT / f"{queue_id}.{meta['ext']}").unlink(missing_ok=True)
-    meta_path.unlink()
+    meta = json.loads(file_tools.pending_review_read_text(f"{queue_id}.json"))
+    file_tools.pending_review_delete(f"{queue_id}.{meta['ext']}", missing_ok=True)
+    file_tools.pending_review_delete(f"{queue_id}.json")
     return {"status": "rejected"}
 
 
@@ -449,7 +454,11 @@ def get_manifest():
 def query(req: QueryRequest):
     try:
         result = answer_query(req.question, req.mode)
-        return {"answer": result["final_text"], "turns": result["turns"], "cache_read_tokens": result.get("cache_read_tokens", 0)}
+        return {
+            "answer": result["final_text"],
+            "turns": result["turns"],
+            "cache_read_tokens": result.get("cache_read_tokens", 0),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -463,7 +472,7 @@ def feedback(req: FeedbackRequest):
     """
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
     entry = (
-        f'## {timestamp} — status: unprocessed\n'
+        f"## {timestamp} — status: unprocessed\n"
         f'Q: "{req.question}"\n'
         f'Bad answer: "{req.bad_answer}"\n'
         f'Correction: "{req.correction}"'
@@ -495,7 +504,11 @@ def lint():
     """Report-only wiki health check. Writes lint-report.md, fixes nothing."""
     try:
         result = run_lint()
-        return {"summary": result["final_text"], "turns": result["turns"], "cache_read_tokens": result.get("cache_read_tokens", 0)}
+        return {
+            "summary": result["final_text"],
+            "turns": result["turns"],
+            "cache_read_tokens": result.get("cache_read_tokens", 0),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

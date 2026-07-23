@@ -4,12 +4,25 @@ the manifest.json that tracks per-page system metadata (id, layer, parent,
 token_count, content_hash). Nothing in this module ever calls the model —
 per the Design Notes, size/hash/split-trigger decisions must be mechanical,
 not an LLM judgment call.
+
+OneDrive-backed version: manifest.json is still read-whole / write-whole
+(no structural change from the original — it was always "load the whole
+JSON blob, mutate in memory, save the whole blob back"), just via
+graph_client instead of Path.read_text()/write_text(). Every public
+function keeps its original name and signature.
 """
+
 import hashlib
 import json
 from typing import Optional
 
-from backend.config import MANIFEST_PATH, TOKEN_BUDGET, FILE_COUNT_THRESHOLD
+from backend.config import (
+    graph_client,
+    MANIFEST_PATH,
+    TOKEN_BUDGET,
+    FILE_COUNT_THRESHOLD,
+)
+from backend.graph_client import GraphNotFound
 
 
 def compute_hash(content: str) -> str:
@@ -30,17 +43,23 @@ def estimate_tokens(content: str) -> int:
 
 
 def load_manifest() -> dict:
-    if not MANIFEST_PATH.exists():
+    try:
+        content = graph_client.read_file(MANIFEST_PATH)
+    except GraphNotFound:
         return {}
-    return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    return json.loads(content.decode("utf-8"))
 
 
 def save_manifest(manifest: dict) -> None:
-    MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
-    MANIFEST_PATH.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
+    # Old version did MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    # before writing — the Graph equivalent is ensure_folder on wiki/, in
+    # case this is the very first write before the folder structure setup
+    # step has run. Cheap no-op (one metadata check) once it already exists.
+    parent = MANIFEST_PATH.rsplit("/", 1)[0] if "/" in MANIFEST_PATH else ""
+    if parent:
+        graph_client.ensure_folder(parent)
+    body = json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True)
+    graph_client.write_file(MANIFEST_PATH, body.encode("utf-8"))
 
 
 def get_entry(rel_path: str) -> Optional[dict]:
@@ -88,7 +107,8 @@ def folder_totals(prefix: str) -> dict:
     """
     manifest = load_manifest()
     matching = [
-        e for path, e in manifest.items()
+        e
+        for path, e in manifest.items()
         if path.startswith(prefix + "/") and e.get("layer") == "source"
     ]
     return {
@@ -99,4 +119,7 @@ def folder_totals(prefix: str) -> dict:
 
 def needs_split(prefix: str) -> bool:
     totals = folder_totals(prefix)
-    return totals["file_count"] > FILE_COUNT_THRESHOLD and totals["total_tokens"] > TOKEN_BUDGET
+    return (
+        totals["file_count"] > FILE_COUNT_THRESHOLD
+        and totals["total_tokens"] > TOKEN_BUDGET
+    )

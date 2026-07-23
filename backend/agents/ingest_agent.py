@@ -11,6 +11,7 @@ frontmatter automatically after this returns (see tools/postprocess.py),
 using deterministic hash/token-count logic. This agent only needs to get
 the CONTENT right.
 """
+
 from backend.agentic_loop import run_agent_loop
 from backend.tools import file_tools
 from backend.tools.tool_defs import INGEST_TOOLS
@@ -60,11 +61,22 @@ def _dispatch(tool_name: str, tool_input: dict) -> str:
     if tool_name == "read_file":
         return file_tools.read_file(tool_input["path"])
     if tool_name == "list_files":
-        return "\n".join(file_tools.list_files(tool_input.get("subdir", ""))) or "(no files)"
+        return (
+            "\n".join(file_tools.list_files(tool_input.get("subdir", "")))
+            or "(no files)"
+        )
     if tool_name == "list_dirs":
-        return "\n".join(file_tools.list_dirs(tool_input.get("subdir", ""))) or "(no subfolders)"
+        return (
+            "\n".join(file_tools.list_dirs(tool_input.get("subdir", "")))
+            or "(no subfolders)"
+        )
     if tool_name == "grep":
-        return "\n".join(file_tools.grep(tool_input["pattern"], tool_input.get("subdir", ""))) or "(no matches)"
+        return (
+            "\n".join(
+                file_tools.grep(tool_input["pattern"], tool_input.get("subdir", ""))
+            )
+            or "(no matches)"
+        )
     if tool_name == "write_file":
         return file_tools.write_file(tool_input["path"], tool_input["content"])
     if tool_name == "append_log":
@@ -79,7 +91,9 @@ def write_page(
     governing_index_path: str,
     classification: dict,
 ) -> dict:
-    schema_text = SCHEMA_PATH.read_text(encoding="utf-8")
+    # SCHEMA_PATH is a OneDrive path string now, not a local Path — reading
+    # it means a real Graph network call (see file_tools.read_project_file).
+    schema_text = file_tools.read_project_file(SCHEMA_PATH)
     system_prompt = SYSTEM_PROMPT.format(schema=schema_text)
 
     instructions = (
