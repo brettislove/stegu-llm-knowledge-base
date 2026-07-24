@@ -45,8 +45,10 @@ app = FastAPI(title="Knowledge Base MVP")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "*"
-    ],  # fine for local MVP testing; tighten before any real deployment
+        "https://decorstone.sparxoft.com",
+        "https://stegu-llm-knowledge-base.vercel.app/",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
