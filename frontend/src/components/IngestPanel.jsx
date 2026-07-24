@@ -9,7 +9,7 @@ const ACCEPTED_EXTENSIONS = [".pdf", ".md", ".markdown", ".txt", ".docx", ".xlsx
 
 // Align this with wherever your api.js points requests — this matches the
 // default `uvicorn backend.main:app --port 8000` from main.py's docstring.
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // Fixed stage order + Czech labels shown while pending/active — actual
 // labels from the backend (event.label) override these once a stage starts.
@@ -121,7 +121,7 @@ export default function IngestPanel() {
     setSteps(initialSteps());
     try {
       const base64Data = await pdfToBase64(file);
-      const response = await fetch(`${API_BASE}/ingest/stream`, {
+      const response = await fetch(`${apiUrl}/ingest/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filename: file.name, file_base64: base64Data }),
