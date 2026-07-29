@@ -7,6 +7,13 @@ import io
 import mammoth
 import pandas as pd
 
+# Per Design Notes / SCHEMA.md §3: images get no OCR/vision pass — the
+# generated page just links to the paired image file. So these extensions
+# don't get their pixels extracted or sent to Claude's vision input; the
+# LLM only sees a short placeholder telling it what kind of file this is,
+# same shape as every other convert_file() branch (a markdown-ish string).
+IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp", "bmp", "tiff", "tif"}
+
 def convert_file(filename: str, file_base64: str) -> tuple[str | None, str | None]:
     """
     Inspects file extension, decodes the base64 string, and extracts contents.
@@ -68,6 +75,15 @@ def convert_file(filename: str, file_base64: str) -> tuple[str | None, str | Non
             return None, df.to_markdown(index=False)
         except Exception as e:
             raise ValueError(f"Failed to parse CSV file: {str(e)}")
+
+    # 6. Images — no OCR/vision pass (see IMAGE_EXTENSIONS note above).
+    elif ext in IMAGE_EXTENSIONS:
+        return None, (
+            f"[Obrázek: {filename}]\n\n"
+            "Toto je obrázek bez textového obsahu — nebyl proveden OCR/vision "
+            "rozbor (dle SCHEMA.md §3). Stránka by měla pouze odkazovat na "
+            "přiložený soubor obrázku, ne popisovat jeho vizuální obsah."
+        )
 
     else:
         raise ValueError(f"Unsupported file type extension: .{ext}")
