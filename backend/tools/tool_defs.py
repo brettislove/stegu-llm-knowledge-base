@@ -164,7 +164,11 @@ PROPOSE_CLASSIFICATION = {
 
 # Tool sets per agent — mirrors SCHEMA.md §8 permissions exactly.
 CLASSIFY_TOOLS = [READ_FILE, LIST_FILES, LIST_DIRS, GREP, PROPOSE_CLASSIFICATION]
-INGEST_TOOLS = [READ_FILE, LIST_FILES, LIST_DIRS, GREP, WRITE_FILE, APPEND_LOG]
+# No APPEND_LOG here — log.md entries for ingestion are now written
+# deterministically by main.py (file_tools.append_structured_log_entry),
+# not by this agent. APPEND_LOG itself is still used directly by the
+# /feedback route for feedback_log.md.
+INGEST_TOOLS = [READ_FILE, LIST_FILES, LIST_DIRS, GREP, WRITE_FILE]
 QUERY_TOOLS = [READ_FILE, LIST_FILES, GREP]              # read-only, no write access
 DISTILL_TOOLS = [READ_FILE, LIST_FILES, WRITE_FILE]        # no append_log — see distill_agent.py
 LINT_TOOLS = [READ_FILE, LIST_FILES, GREP, WRITE_FILE]      # write restricted to lint-report.md, enforced in lint_agent.py

@@ -33,16 +33,15 @@ Steps:
 2. Update the given "governing index" file — add or update the one-line
    entry for this page under the right heading (create the heading if it
    doesn't exist yet).
-3. Append one entry to log.md summarizing what changed (same style as
-   existing entries: "Created:"/"Updated:" bullets).
 
-All USER-FACING CONTENT — page title, page body, index entries, and log
-descriptions — must be written in CZECH. Code-level values (doc_type,
-access, file paths) stay as their fixed English enum values.
+log.md is updated automatically after you finish — not your job.
 
-Efficiency: once you know the page content, the index update, and the log
-entry, request all three write/append calls in the SAME turn rather than
-one at a time.
+All USER-FACING CONTENT — page title, page body, and index entries — must
+be written in CZECH. Code-level values (doc_type, access, file paths) stay
+as their fixed English enum values.
+
+Efficiency: once you know the page content and the index update, request
+both write calls in the SAME turn rather than one at a time.
 
 Rules:
 - write_file always takes the FULL file content — never a partial diff.
@@ -79,8 +78,6 @@ def _dispatch(tool_name: str, tool_input: dict) -> str:
         )
     if tool_name == "write_file":
         return file_tools.write_file(tool_input["path"], tool_input["content"])
-    if tool_name == "append_log":
-        return file_tools.append_log(tool_input["path"], tool_input["entry"])
     raise ValueError(f"Unknown tool for ingest agent: {tool_name}")
 
 

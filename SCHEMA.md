@@ -176,11 +176,13 @@ in Notes and in the governing index entry.
      misfiling is worse than a manual step at this scale — never guess past
      this gate.
    - `confidence: high` → proceed.
-5. **Write (LLM):** the ingest agent writes the page content, updates the
-   correct governing index entry, appends a `log.md` entry.
+5. **Write (LLM):** the ingest agent writes the page content and updates
+   the correct governing index entry — it no longer writes `log.md` itself.
 6. **Finalize (deterministic, no LLM):** system frontmatter fields are
    computed and patched in; `manifest.json` is updated; the split-trigger
-   check (§1a) runs and is reported if crossed.
+   check (§1a) runs and is reported if crossed; a structured `log.md`
+   entry is appended (file, detected type, destination, confidence, or a
+   failure message on error) — mechanical, same as the rest of this step.
 
 ## 6. Governing index format
 
@@ -199,8 +201,12 @@ level currently governs it.
 
 ## 7. log.md, lessons.md, feedback_log.md, lint-report.md
 
-Unchanged from the original schema:
-- `log.md` — append-only, one entry per ingest run.
+- `log.md` — append-only, one structured entry per ingest run/outcome
+  (status, file, detected type, destination, confidence, and a failure
+  message when the run errors out). Written deterministically by the
+  backend after each ingest/finalize step, not by the ingest agent — same
+  "mechanical, not an LLM judgment call" principle as manifest.json and
+  system frontmatter fields.
 - `lessons.md` — curated, deduped rules; written only by the distill agent;
   read by every agent on every call.
 - `feedback_log.md` — raw, append-only, written directly by the backend on
@@ -221,11 +227,13 @@ call, never writes)
    level. Default to `low` whenever unsure.
 
 **Ingest agent (writer)** (tools: `read_file`, `list_files`, `list_dirs`,
-`grep`, `write_file`, `append_log` — write access)
+`grep`, `write_file` — write access)
 1. Given an already-decided classification and an exact destination path,
    write the page (content only — system fields are filled in afterward).
 2. Update the governing index entry (told explicitly which file to update).
-3. Append a `log.md` entry.
+
+The `log.md` entry is no longer this agent's job — it's appended
+deterministically by the backend during finalize (§5, §9).
 
 **Query agent** (tools: `read_file`, `list_files`, `grep` — read-only)
 1. Read `lessons.md` and root `index.md`.

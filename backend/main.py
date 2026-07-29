@@ -158,6 +158,14 @@ def _run_full_ingest(filename: str, raw_bytes: bytes, classification: dict) -> d
             f"consider running POST /split/{category}."
         )
 
+    file_tools.append_structured_log_entry(
+        status="ingested",
+        file=filename,
+        detected_type=classification.get("doc_type", ""),
+        destination=destination_path,
+        confidence=classification.get("confidence", ""),
+    )
+
     return {
         "status": "ingested",
         "destination": destination_path,
@@ -185,7 +193,17 @@ def _write_and_finalize(filename, raw_bytes, classification, content_for_llm):
     return destination_path, category, topic, result, raw_sibling_meta
 
 
-def _finalize(destination_path, category, topic, raw_bytes, result, raw_sibling_meta=None):
+def _finalize(
+    destination_path,
+    category,
+    topic,
+    raw_bytes,
+    result,
+    raw_sibling_meta=None,
+    *,
+    filename: str = "",
+    classification: Optional[dict] = None,
+):
     raw_hash = extract_content_hash(raw_sibling_meta) or hashing.compute_hash_bytes(
         raw_bytes
     )
@@ -198,6 +216,15 @@ def _finalize(destination_path, category, topic, raw_bytes, result, raw_sibling_
             f"Category '{prefix}' has crossed the file-count/token threshold — "
             f"consider running POST /split/{category}."
         )
+
+    file_tools.append_structured_log_entry(
+        status="ingested",
+        file=filename,
+        detected_type=(classification or {}).get("doc_type", ""),
+        destination=destination_path,
+        confidence=(classification or {}).get("confidence", ""),
+    )
+
     return {
         "status": "ingested",
         "destination": destination_path,
@@ -225,6 +252,13 @@ def _queue_for_review(filename: str, raw_bytes: bytes, classification: dict) -> 
     file_tools.pending_review_write(
         f"{qid}.json",
         json.dumps(meta, ensure_ascii=False, indent=2).encode("utf-8"),
+    )
+    file_tools.append_structured_log_entry(
+        status="pending_review",
+        file=filename,
+        detected_type=classification.get("doc_type", ""),
+        destination="(pending review)",
+        confidence=classification.get("confidence", ""),
     )
     return {
         "status": "pending_review",
@@ -275,6 +309,9 @@ def _ingest_pipeline(req: IngestRequest):
         content_for_llm = _build_llm_content(req.filename, req.file_base64, raw_bytes)
     except ValueError as e:
         yield _sse({"stage": "convert", "status": "error", "message": str(e)})
+        file_tools.append_structured_log_entry(
+            status="failed", file=req.filename, failure=str(e)
+        )
         return
     yield _sse({"stage": "convert", "status": "done"})
 
@@ -285,6 +322,9 @@ def _ingest_pipeline(req: IngestRequest):
         classification = classify_document(req.filename, content_for_llm)
     except Exception as e:
         yield _sse({"stage": "classify", "status": "error", "message": str(e)})
+        file_tools.append_structured_log_entry(
+            status="failed", file=req.filename, failure=str(e)
+        )
         return
     yield _sse(
         {
@@ -312,6 +352,9 @@ def _ingest_pipeline(req: IngestRequest):
         )
     except Exception as e:
         yield _sse({"stage": "write", "status": "error", "message": str(e)})
+        file_tools.append_structured_log_entry(
+            status="failed", file=req.filename, failure=str(e)
+        )
         return
     yield _sse({"stage": "write", "status": "done"})
 
@@ -324,10 +367,20 @@ def _ingest_pipeline(req: IngestRequest):
     )
     try:
         result = _finalize(
-            destination_path, category, topic, raw_bytes, agent_result, raw_sibling_meta
+            destination_path,
+            category,
+            topic,
+            raw_bytes,
+            agent_result,
+            raw_sibling_meta,
+            filename=req.filename,
+            classification=classification,
         )
     except Exception as e:
         yield _sse({"stage": "finalize", "status": "error", "message": str(e)})
+        file_tools.append_structured_log_entry(
+            status="failed", file=req.filename, failure=str(e)
+        )
         return
     yield _sse({"stage": "finalize", "status": "done"})
 
@@ -362,11 +415,17 @@ async def ingest(req: IngestRequest):
                     req.filename, req.file_base64, raw_bytes
                 )
             except ValueError as e:
+                file_tools.append_structured_log_entry(
+                    status="failed", file=req.filename, failure=str(e)
+                )
                 raise HTTPException(status_code=400, detail=str(e))
 
             try:
                 classification = classify_document(req.filename, content_for_llm)
             except Exception as e:
+                file_tools.append_structured_log_entry(
+                    status="failed", file=req.filename, failure=str(e)
+                )
                 raise HTTPException(
                     status_code=500, detail=f"Classification failed: {e}"
                 )
@@ -377,6 +436,9 @@ async def ingest(req: IngestRequest):
             try:
                 return _run_full_ingest(req.filename, raw_bytes, classification)
             except Exception as e:
+                file_tools.append_structured_log_entry(
+                    status="failed", file=req.filename, failure=str(e)
+                )
                 raise HTTPException(status_code=500, detail=str(e))
         finally:
             file_tools.release_ingest_lock()
@@ -456,8 +518,13 @@ async def approve_pending_review(
                     raw_bytes,
                     agent_result,
                     raw_sibling_meta,
+                    filename=meta["filename"],
+                    classification=classification,
                 )
             except Exception as e:
+                file_tools.append_structured_log_entry(
+                    status="failed", file=meta["filename"], failure=str(e)
+                )
                 raise HTTPException(status_code=500, detail=str(e))
         finally:
             file_tools.release_ingest_lock()

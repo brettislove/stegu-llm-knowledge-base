@@ -406,6 +406,33 @@ def append_log(relative_path: str, entry: str) -> str:
     return f"Appended entry to {relative_path}"
 
 
+def append_structured_log_entry(
+    *,
+    status: str,
+    file: str,
+    detected_type: str = "",
+    destination: str = "",
+    confidence: str = "",
+    failure: str = "",
+) -> None:
+    """Deterministic counterpart to append_log, used for log.md — same
+    "mechanical, not an LLM judgment call" principle already applied to
+    frontmatter system fields, split-trigger checks, and index cleanup.
+    Captures exactly what the Design Notes ask an ingestion run to log:
+    file, detected type, destination, confidence, and any failure."""
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+    lines = [f"## {timestamp} — {status}", f"- file: {file}"]
+    if detected_type:
+        lines.append(f"- detected_type: {detected_type}")
+    if destination:
+        lines.append(f"- destination: {destination}")
+    if confidence:
+        lines.append(f"- confidence: {confidence}")
+    if failure:
+        lines.append(f"- failure: {failure}")
+    append_log("log.md", "\n".join(lines))
+
+
 def grep(pattern: str, subdir: str = "") -> List[str]:
     """Case-insensitive regex search across wiki markdown files."""
     base = _wiki_path(subdir) if subdir else WIKI_ROOT
