@@ -329,16 +329,3 @@ class GraphClient:
         )
         _raise_for_status(resp)
         return resp.json()
-
-
-# gc = GraphClient(
-#     tenant_id="2611c644-8735-4385-8334-712801f70262",
-#     client_id="7d12905a-07ac-4ed2-befe-ac7f37bd410f",
-#     client_secret="***REDACTED-AZURE-SECRET***",
-#     drive_user="admin@stegu.cz",
-# )
-# print(gc.list_children())  # should list root
-# gc.create_folder("", "wiki")  # create /wiki/
-# gc.write_file("wiki/test.md", b"# hi")  # write a test file
-# print(gc.read_file("wiki/test.md"))  # read it back
-# gc.delete_item("wiki/test.md")  # clean up
