@@ -8,3 +8,4 @@ pandas
 openpyxl
 tabulate
 requests
+pyjwt[crypto]>=2.8

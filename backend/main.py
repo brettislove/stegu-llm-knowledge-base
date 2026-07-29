@@ -39,14 +39,21 @@ from backend.tools import file_tools, hashing
 from backend.tools.postprocess import finalize_page, refresh_token_counts
 from backend.converters import convert_file
 from backend.config import VALID_CATEGORY
+from backend.auth import ClerkAuthMiddleware
 
 app = FastAPI(title="Knowledge Base MVP")
 
+# Order matters: Starlette applies middleware in reverse of add order, so
+# CORS (added second) runs outermost and can attach headers to the 401
+# responses ClerkAuthMiddleware returns. Auth still runs before any route
+# handler either way.
+app.add_middleware(ClerkAuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://decorstone.sparxoft.com",
         "https://stegu-llm-knowledge-base.vercel.app/",
+        "http://localhost:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],

@@ -1,8 +1,15 @@
 const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 async function request(path, options = {}) {
+  // window.Clerk is attached by <ClerkProvider> once it loads (see main.jsx)
+  // — api.js is a plain module, not a component, so it can't use the
+  // useAuth() hook to get the current session token.
+  const token = await window.Clerk?.session?.getToken();
   const res = await fetch(`${apiUrl}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...options,
   });
   if (!res.ok) {
