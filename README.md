@@ -117,11 +117,9 @@ a modal.
 ## What's not built yet
 
 - Automatic triggering of `/distill` (currently a manual button — fine for MVP).
-- Auth on the frontend or API (open for local testing only).
 - Streaming responses (chat currently waits for the full agent loop to finish
   before showing an answer — fine while the wiki is small, worth revisiting
   if ingest/query turns start taking a while).
-- Auth on the API endpoints — currently open, fine for local testing only.
 
 ## Project layout
 
