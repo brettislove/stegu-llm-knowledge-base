@@ -189,12 +189,17 @@ def write_binary(relative_path: str, data: bytes) -> str:
     return f"Wrote {len(data)} bytes to {relative_path}"
 
 
-def store_raw_sibling(destination_path: str, filename: str, raw_bytes: bytes) -> None:
+def store_raw_sibling(destination_path: str, filename: str, raw_bytes: bytes) -> dict:
     """Writes the original uploaded file next to its rendered .md page,
     same stem, using the upload's own extension (e.g. produkty/foo.md gets
     a paired produkty/foo.pdf). Replaces any stale sibling with a
     *different* extension first — this happens when a re-ingested update
     switches source format (e.g. .docx -> .pdf for the same page).
+
+    Returns the driveItem metadata Graph gives back for the written
+    sibling (includes file.hashes.sha256Hash when Graph populates it) —
+    callers use this to source content_hash from Graph itself rather than
+    a redundant local re-hash (see graph_client.extract_content_hash).
 
     This is the direct replacement for main.py's old _store_raw_sibling,
     which did the same thing with Path.glob()/.unlink()/.write_bytes()
@@ -217,7 +222,7 @@ def store_raw_sibling(destination_path: str, filename: str, raw_bytes: bytes) ->
             graph_client.delete_item(item_path)
 
     sibling_path = f"{dest_parent}/{stem}.{ext}" if dest_parent else f"{stem}.{ext}"
-    graph_client.write_file(sibling_path, raw_bytes)
+    return graph_client.write_file(sibling_path, raw_bytes)
 
 
 def move_file(src: str, dst: str) -> str:

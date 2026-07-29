@@ -40,6 +40,7 @@ from backend.tools.postprocess import finalize_page, refresh_token_counts
 from backend.converters import convert_file
 from backend.config import VALID_CATEGORY
 from backend.auth import ClerkAuthMiddleware
+from backend.graph_client import extract_content_hash
 
 app = FastAPI(title="Knowledge Base MVP")
 
@@ -135,13 +136,18 @@ def _run_full_ingest(filename: str, raw_bytes: bytes, classification: dict) -> d
     topic = classification.get("topic") or None
     governing_index = file_tools.governing_index_path(category, topic)
 
-    file_tools.store_raw_sibling(destination_path, filename, raw_bytes)
+    raw_sibling_meta = file_tools.store_raw_sibling(destination_path, filename, raw_bytes)
 
     result = write_page(
         filename, content_for_llm, destination_path, governing_index, classification
     )
 
-    raw_hash = hashing.compute_hash_bytes(raw_bytes)
+    # Prefer Graph's own sha256Hash for the stored/authoritative hash — the
+    # local hash (already computed above for the pre-upload dedup check) is
+    # only a fallback for when Graph doesn't populate it.
+    raw_hash = extract_content_hash(raw_sibling_meta) or hashing.compute_hash_bytes(
+        raw_bytes
+    )
     finalize_page(destination_path, category, topic, raw_hash)
 
     split_hint = None
@@ -172,15 +178,17 @@ def _write_and_finalize(filename, raw_bytes, classification, content_for_llm):
     topic = classification.get("topic") or None
     governing_index = file_tools.governing_index_path(category, topic)
 
-    file_tools.store_raw_sibling(destination_path, filename, raw_bytes)
+    raw_sibling_meta = file_tools.store_raw_sibling(destination_path, filename, raw_bytes)
     result = write_page(
         filename, content_for_llm, destination_path, governing_index, classification
     )
-    return destination_path, category, topic, result
+    return destination_path, category, topic, result, raw_sibling_meta
 
 
-def _finalize(destination_path, category, topic, raw_bytes, result):
-    raw_hash = hashing.compute_hash_bytes(raw_bytes)
+def _finalize(destination_path, category, topic, raw_bytes, result, raw_sibling_meta=None):
+    raw_hash = extract_content_hash(raw_sibling_meta) or hashing.compute_hash_bytes(
+        raw_bytes
+    )
     finalize_page(destination_path, category, topic, raw_hash)
 
     split_hint = None
@@ -297,8 +305,10 @@ def _ingest_pipeline(req: IngestRequest):
 
     yield _sse({"stage": "write", "status": "start", "label": "Zápis stránky do wiki"})
     try:
-        destination_path, category, topic, agent_result = _write_and_finalize(
-            req.filename, raw_bytes, classification, content_for_llm
+        destination_path, category, topic, agent_result, raw_sibling_meta = (
+            _write_and_finalize(
+                req.filename, raw_bytes, classification, content_for_llm
+            )
         )
     except Exception as e:
         yield _sse({"stage": "write", "status": "error", "message": str(e)})
@@ -313,7 +323,9 @@ def _ingest_pipeline(req: IngestRequest):
         }
     )
     try:
-        result = _finalize(destination_path, category, topic, raw_bytes, agent_result)
+        result = _finalize(
+            destination_path, category, topic, raw_bytes, agent_result, raw_sibling_meta
+        )
     except Exception as e:
         yield _sse({"stage": "finalize", "status": "error", "message": str(e)})
         return
@@ -432,11 +444,18 @@ async def approve_pending_review(
                 content_for_llm = _build_llm_content(
                     meta["filename"], base64.b64encode(raw_bytes).decode(), raw_bytes
                 )
-                destination_path, category, topic, agent_result = _write_and_finalize(
-                    meta["filename"], raw_bytes, classification, content_for_llm
+                destination_path, category, topic, agent_result, raw_sibling_meta = (
+                    _write_and_finalize(
+                        meta["filename"], raw_bytes, classification, content_for_llm
+                    )
                 )
                 result = _finalize(
-                    destination_path, category, topic, raw_bytes, agent_result
+                    destination_path,
+                    category,
+                    topic,
+                    raw_bytes,
+                    agent_result,
+                    raw_sibling_meta,
                 )
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))

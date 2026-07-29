@@ -34,6 +34,22 @@ _RESERVED_NAMES = {
 }
 
 
+def extract_content_hash(item_metadata: Optional[dict]) -> Optional[str]:
+    """Pulls Graph's own sha256Hash out of a driveItem's `file.hashes`
+    facet (the metadata dict returned by write_file/_write_large_file),
+    formatted as 'sha256:<hex>' to match the convention already used
+    throughout hashing.py/manifest.json. Returns None if Graph didn't
+    populate it — known to happen sometimes for OneDrive for Business,
+    especially right after a chunked upload session — so callers should
+    fall back to a locally computed hash in that case."""
+    if not item_metadata:
+        return None
+    sha256 = item_metadata.get("file", {}).get("hashes", {}).get("sha256Hash")
+    if sha256:
+        return f"sha256:{sha256.lower()}"
+    return None
+
+
 def sanitize_filename(name: str) -> str:
     """Rewrites `name` so it's safe to use as a OneDrive file/folder name.
     Replaces illegal characters with '_', strips leading/trailing spaces
