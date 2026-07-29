@@ -66,13 +66,24 @@ class IngestLockedError(RuntimeError):
 def _wiki_path(relative_path: str) -> str:
     """Validates relative_path and returns the full OneDrive-relative path
     (WIKI_ROOT joined with it), as a forward-slash string suitable for
-    GraphClient calls."""
+    GraphClient calls.
+
+    Every path segment is run through sanitize_filename() here — this is
+    the one chokepoint every wiki read/write already funnels through
+    (write_file, write_binary, store_raw_sibling, delete_file, move_file,
+    append_log, every agent tool dispatch), so it's the natural single
+    shared place to enforce OneDrive-safe names per the Design Notes,
+    rather than sanitizing ad hoc at each call site. A no-op for the
+    common case (slugify() already produces OneDrive-safe names); the real
+    guard is for names that reach here without going through slugify first
+    — e.g. an LLM-proposed topic folder name."""
     if not relative_path or relative_path.startswith("/"):
         raise PathError(f"Invalid or unsafe path: {relative_path!r}")
     parts = PurePosixPath(relative_path).parts
     if ".." in parts:
         raise PathError(f"Invalid or unsafe path: {relative_path!r}")
-    return f"{WIKI_ROOT}/{relative_path}".strip("/")
+    sanitized = "/".join(sanitize_filename(part) for part in parts)
+    return f"{WIKI_ROOT}/{sanitized}"
 
 
 def slugify(text: str) -> str:
