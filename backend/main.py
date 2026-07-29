@@ -326,39 +326,48 @@ def _ingest_pipeline(req: IngestRequest):
 async def ingest(req: IngestRequest):
     async with _ingest_lock:
         try:
-            raw_bytes = base64.b64decode(req.file_base64)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Malformed base64: {e}")
-
-        # Deterministic hash check — no LLM call at all if this exact file
-        # is already in the wiki.
-        raw_hash = hashing.compute_hash_bytes(raw_bytes)
-        existing = hashing.find_by_hash(raw_hash)
-        if existing:
-            return {
-                "status": "unchanged",
-                "message": f"Tento soubor je již ve wiki beze změny ({existing}).",
-            }
-
+            file_tools.acquire_ingest_lock()
+        except file_tools.IngestLockedError as e:
+            raise HTTPException(status_code=409, detail=str(e))
         try:
-            content_for_llm = _build_llm_content(
-                req.filename, req.file_base64, raw_bytes
-            )
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            try:
+                raw_bytes = base64.b64decode(req.file_base64)
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Malformed base64: {e}")
 
-        try:
-            classification = classify_document(req.filename, content_for_llm)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Classification failed: {e}")
+            # Deterministic hash check — no LLM call at all if this exact file
+            # is already in the wiki.
+            raw_hash = hashing.compute_hash_bytes(raw_bytes)
+            existing = hashing.find_by_hash(raw_hash)
+            if existing:
+                return {
+                    "status": "unchanged",
+                    "message": f"Tento soubor je již ve wiki beze změny ({existing}).",
+                }
 
-        if classification.get("confidence") == "low":
-            return _queue_for_review(req.filename, raw_bytes, classification)
+            try:
+                content_for_llm = _build_llm_content(
+                    req.filename, req.file_base64, raw_bytes
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
 
-        try:
-            return _run_full_ingest(req.filename, raw_bytes, classification)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            try:
+                classification = classify_document(req.filename, content_for_llm)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500, detail=f"Classification failed: {e}"
+                )
+
+            if classification.get("confidence") == "low":
+                return _queue_for_review(req.filename, raw_bytes, classification)
+
+            try:
+                return _run_full_ingest(req.filename, raw_bytes, classification)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            file_tools.release_ingest_lock()
 
 
 @app.post("/ingest/stream")
@@ -366,9 +375,21 @@ async def ingest_stream(req: IngestRequest):
     async def gen():
         await _ingest_lock.acquire()
         try:
+            file_tools.acquire_ingest_lock()
+        except file_tools.IngestLockedError as e:
+            _ingest_lock.release()
+            yield _sse(
+                {
+                    "stage": "finished",
+                    "result": {"status": "error", "message": str(e)},
+                }
+            )
+            return
+        try:
             for chunk in _ingest_pipeline(req):
                 yield chunk
         finally:
+            file_tools.release_ingest_lock()
             _ingest_lock.release()
 
     return StreamingResponse(gen(), media_type="text/event-stream")
@@ -403,17 +424,24 @@ async def approve_pending_review(
 
     async with _ingest_lock:
         try:
-            content_for_llm = _build_llm_content(
-                meta["filename"], base64.b64encode(raw_bytes).decode(), raw_bytes
-            )
-            destination_path, category, topic, agent_result = _write_and_finalize(
-                meta["filename"], raw_bytes, classification, content_for_llm
-            )
-            result = _finalize(
-                destination_path, category, topic, raw_bytes, agent_result
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            file_tools.acquire_ingest_lock()
+        except file_tools.IngestLockedError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        try:
+            try:
+                content_for_llm = _build_llm_content(
+                    meta["filename"], base64.b64encode(raw_bytes).decode(), raw_bytes
+                )
+                destination_path, category, topic, agent_result = _write_and_finalize(
+                    meta["filename"], raw_bytes, classification, content_for_llm
+                )
+                result = _finalize(
+                    destination_path, category, topic, raw_bytes, agent_result
+                )
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            file_tools.release_ingest_lock()
 
     file_tools.pending_review_delete(raw_name, missing_ok=True)
     file_tools.pending_review_delete(f"{queue_id}.json", missing_ok=True)
@@ -448,10 +476,16 @@ async def split(category: str):
         raise HTTPException(status_code=400, detail=f"Unknown category: {category}")
     async with _ingest_lock:  # split rewrites the same index files ingestion touches
         try:
+            file_tools.acquire_ingest_lock()
+        except file_tools.IngestLockedError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        try:
             result = split_category(category)
             return {"summary": result["final_text"], "turns": result["turns"]}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            file_tools.release_ingest_lock()
 
 
 @app.get("/wiki/manifest")

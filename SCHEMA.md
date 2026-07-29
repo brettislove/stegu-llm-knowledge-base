@@ -4,10 +4,14 @@ This document defines how the wiki is structured and how agents (classify,
 ingest, query, distill, lint, split) are expected to read and write it. All
 agents receive this file as part of their system context on every call.
 
-**Local MVP note:** this instance runs entirely on local disk under `wiki/`
-(no OneDrive/Graph API — that's the production-target design, not this test
-environment). Single-writer discipline is enforced with an in-process
-`asyncio.Lock` around ingestion instead of a cloud lock file.
+**Runtime note:** this instance is OneDrive/Graph-API-backed — `wiki/`,
+`raw/`, `pending_review/`, and `archive/` are folders in a business
+OneDrive drive, read and written via Microsoft Graph, not local disk.
+Single-writer discipline is enforced two ways: an in-process `asyncio.Lock`
+(guards against the same backend process racing itself) and a real
+`_system/ingest.lock` item written to OneDrive before a batch run and
+deleted on completion (guards against two backend processes/deploys
+racing each other) — see §5.
 
 ## 1. Directory layout — variable depth
 

@@ -58,6 +58,17 @@ MANIFEST_PATH = f"{WIKI_ROOT}/manifest.json"
 SCHEMA_PATH = f"{ONEDRIVE_PROJECT_ROOT}/SCHEMA.md"
 CLAUDE_MD_PATH = f"{ONEDRIVE_PROJECT_ROOT}/CLAUDE.md"
 
+# Cross-process ingest lock (Design Notes "Ingestion-level Locking") — a
+# small item written to OneDrive before a batch run and deleted on
+# completion, so two backend processes (or two overlapping deploys) can't
+# race on the same index files the way the in-process asyncio.Lock alone
+# can't protect against. INGEST_LOCK_STALE_SECONDS is how old an existing
+# lock has to be before it's assumed to belong to a crashed/killed process
+# rather than a live one, and gets reclaimed instead of wedging the
+# pipeline forever.
+INGEST_LOCK_PATH = f"{ONEDRIVE_PROJECT_ROOT}/_system/ingest.lock"
+INGEST_LOCK_STALE_SECONDS = 600
+
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5")
 

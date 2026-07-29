@@ -31,6 +31,8 @@ from backend.config import (
     TOP_LEVEL_FILES,
     ARCHIVE_ROOT,
     PENDING_REVIEW_ROOT,
+    INGEST_LOCK_PATH,
+    INGEST_LOCK_STALE_SECONDS,
 )
 from backend.graph_client import (
     GraphNotFound,
@@ -39,6 +41,12 @@ from backend.graph_client import (
 
 
 class PathError(ValueError):
+    pass
+
+
+class IngestLockedError(RuntimeError):
+    """Raised when another ingestion run already holds ingest.lock."""
+
     pass
 
 
@@ -399,6 +407,54 @@ def grep(pattern: str, subdir: str = "") -> List[str]:
             if regex.search(line):
                 matches.append(f"{rel}:{i}: {line.strip()}")
     return matches
+
+
+# ---------------------------------------------------------------------------
+# Ingest lock
+#
+# Cross-process guard on top of main.py's in-process asyncio.Lock — see
+# Design Notes "Ingestion-level Locking". Not perfectly atomic (there's a
+# small check-then-write race between item_metadata() and write_file()
+# below), but Graph's simple content PUT has no confirmed fail-on-conflict
+# primitive to close that gap; this is the same honest tradeoff as the
+# asyncio.Lock it complements, just extended to cover multiple processes.
+# ---------------------------------------------------------------------------
+
+
+def acquire_ingest_lock() -> None:
+    existing = graph_client.item_metadata(INGEST_LOCK_PATH)
+    if existing is not None:
+        held_since = None
+        try:
+            held_since = datetime.fromisoformat(
+                graph_client.read_file(INGEST_LOCK_PATH).decode("utf-8").strip()
+            )
+        except (GraphNotFound, ValueError):
+            pass
+        age = (
+            (datetime.now(timezone.utc) - held_since).total_seconds()
+            if held_since is not None
+            else None
+        )
+        if age is None or age < INGEST_LOCK_STALE_SECONDS:
+            raise IngestLockedError(
+                "Ingestion is already in progress (ingest.lock present)."
+            )
+        # Lock is older than the staleness window — assume it belongs to a
+        # crashed/killed process and reclaim it rather than wedging the
+        # pipeline forever.
+    lock_parent = INGEST_LOCK_PATH.rsplit("/", 1)[0]
+    graph_client.ensure_folder(lock_parent)
+    graph_client.write_file(
+        INGEST_LOCK_PATH, datetime.now(timezone.utc).isoformat().encode("utf-8")
+    )
+
+
+def release_ingest_lock() -> None:
+    try:
+        graph_client.delete_item(INGEST_LOCK_PATH)
+    except GraphNotFound:
+        pass
 
 
 # ---------------------------------------------------------------------------
