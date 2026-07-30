@@ -1,132 +1,133 @@
 import React, { useEffect, useState } from "react";
+import { useUser, UserButton } from "@clerk/clerk-react";
+import { MessageSquare, Upload, Inbox, FolderOpen, Flag, BarChart3, Menu } from "lucide-react";
 import { api } from "../api.js";
 import { cn } from "@/lib/utils";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import steguLogo from "@/assets/stegu-logo.svg";
 
-const CATEGORIES = [
-  "system",
-  "firma",
-  "produkty",
-  "ceniky-a-kalkulace",
-  "certifikace",
-  "montaz-a-navody",
-  "logistika",
-  "marketing",
-  "data-a-analyzy",
-  "nastroje",
-  "pravo-a-admin",
+const NAV_ITEMS = [
+  { id: "ask", label: "Ptát se", icon: MessageSquare },
+  { id: "ingest", label: "Nahrát", icon: Upload },
+  { id: "pending-review", label: "Ke kontrole", icon: Inbox, showBadge: true },
+  { id: "browse", label: "Prohlížet", icon: FolderOpen },
 ];
 
-const TABS = [
-  { id: "ask", label: "Ask" },
-  { id: "ingest", label: "Nahrát" },
-  { id: "review", label: "Zkontrolovat zpětnou vazbu" },
+const MAINTENANCE_ITEMS = [
+  { id: "feedback", label: "Zpětná vazba", icon: Flag },
+  { id: "spend", label: "Náklady", icon: BarChart3 },
 ];
 
-export default function Sidebar({ tab, setTab, onOpenFile }) {
-  const [expanded, setExpanded] = useState(null);
-  // Loaded once, eagerly, for ALL categories on mount — fixes counts only
-  // appearing after a category is clicked.
-  const [filesByCategory, setFilesByCategory] = useState({});
-  const [loading, setLoading] = useState(true);
+function NavButton({ item, active, onClick, pendingCount }) {
+  const Icon = item.icon;
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        active && "bg-warn-tint text-primary font-semibold hover:bg-warn-tint hover:text-primary"
+      )}
+    >
+      <Icon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.6} />
+      {item.label}
+      {item.showBadge && pendingCount > 0 && (
+        <Badge className="ml-auto px-1.5 py-0.5 text-[11px] font-bold leading-none">{pendingCount}</Badge>
+      )}
+    </button>
+  );
+}
+
+function NavContent({ tab, go, pendingCount, user }) {
+  return (
+    <div className="flex h-full flex-col overflow-hidden bg-card px-4 pb-4 pt-[22px]">
+      <div className="flex flex-col gap-1 px-1">
+        <img src={steguLogo} alt="Stegu" className="h-[22px] w-auto" />
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Interní panel · wiki
+        </span>
+      </div>
+
+      <nav className="mt-6 flex flex-col gap-0.5">
+        {NAV_ITEMS.map((item) => (
+          <NavButton
+            key={item.id}
+            item={item}
+            active={tab === item.id}
+            onClick={() => go(item.id)}
+            pendingCount={pendingCount}
+          />
+        ))}
+
+        <div className="px-2.5 pb-1.5 pt-3.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Údržba
+        </div>
+        {MAINTENANCE_ITEMS.map((item) => (
+          <NavButton key={item.id} item={item} active={tab === item.id} onClick={() => go(item.id)} />
+        ))}
+      </nav>
+
+      <div className="flex-1" />
+
+      <div className="flex items-center gap-2.5 border-t border-border pt-3.5">
+        <UserButton appearance={{ elements: { userButtonAvatarBox: "h-7 w-7" } }} />
+        <div className="flex min-w-0 flex-col leading-tight">
+          <span className="truncate text-[12.5px] font-semibold text-foreground">
+            {user?.fullName || user?.username || "Přihlášený uživatel"}
+          </span>
+          <span className="truncate text-[11px] text-muted-foreground">
+            {user?.primaryEmailAddress?.emailAddress || ""}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function Sidebar({ tab, setTab }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const { user } = useUser();
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all(
-      CATEGORIES.map(async (cat) => {
-        try {
-          const { files } = await api.listFiles(cat);
-          return [cat, files];
-        } catch {
-          return [cat, []];
-        }
+    api
+      .getPendingReview()
+      .then(({ items }) => {
+        if (!cancelled) setPendingCount(items.length);
       })
-    ).then((entries) => {
-      if (cancelled) return;
-      setFilesByCategory(Object.fromEntries(entries));
-      setLoading(false);
-    });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, []);
+    // Refetch whenever the active tab changes — cheap, and keeps the badge
+    // accurate right after approving/rejecting an item elsewhere.
+  }, [tab]);
+
+  function go(nextTab) {
+    setTab(nextTab);
+    setMobileOpen(false);
+  }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden border-r border-border bg-card">
-      <div className="border-b border-border px-[18px] py-5">
-        <div className="font-display text-xl font-semibold">Stegu KB</div>
-        <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-          Firemní wiki
-        </div>
-      </div>
+    <>
+      <aside className="h-full w-[232px] shrink-0 border-r border-border mobile:hidden">
+        <NavContent tab={tab} go={go} pendingCount={pendingCount} user={user} />
+      </aside>
 
-      <div className="px-[18px] pb-1.5 pt-4 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-        Katalog souborů
-      </div>
+      <button
+        onClick={() => setMobileOpen(true)}
+        aria-label="Otevřít menu"
+        className="fixed left-4 top-4 z-40 hidden h-9 w-9 items-center justify-center rounded-lg border border-border bg-card shadow-brand mobile:flex"
+      >
+        <Menu className="h-[18px] w-[18px]" strokeWidth={1.8} />
+      </button>
 
-      <ScrollArea className="flex-1 min-h-0">
-        <ul className="flex flex-col gap-0.5 px-2 pb-3">
-          {CATEGORIES.map((cat) => {
-            const files = filesByCategory[cat] || [];
-            const isExpanded = expanded === cat;
-            return (
-              <li key={cat}>
-                <button
-                  onClick={() => setExpanded(isExpanded ? null : cat)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-md px-3 py-2 font-mono text-[12.5px] transition-colors",
-                    isExpanded ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                  )}
-                >
-                  <span>{cat}</span>
-                  <span className={cn("text-[11px]", isExpanded ? "text-primary-foreground/75" : "text-muted-foreground")}>
-                    {loading ? "…" : files.length}
-                  </span>
-                </button>
-
-                {isExpanded && (
-                  // mt-1.5 + ml-3 pl-3 border-l gives clear visual nesting —
-                  // fixes the "not enough spacing between category and files" bug
-                  <ul className="ml-3 mt-1.5 mb-2 flex flex-col gap-0.5 border-l border-border pl-3">
-                    {files.length === 0 && (
-                      <li className="py-1 font-mono text-[11px] text-muted-foreground">(empty)</li>
-                    )}
-                    {files.map((f) => (
-                      <li key={f}>
-                        <button
-                          onClick={() => onOpenFile(f)}
-                          className="w-full rounded-sm px-2 py-1 text-left font-mono text-[11.5px] text-muted-foreground hover:bg-muted hover:text-foreground"
-                        >
-                          {f.split("/").pop()}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </ScrollArea>
-
-      <Separator />
-      <div className="flex flex-col py-2">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              "border-l-[3px] px-[18px] py-3.5 text-left text-[13.5px] font-medium transition-colors",
-              tab === t.id
-                ? "border-l-primary bg-background text-foreground"
-                : "border-l-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-    </div>
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent>
+          <NavContent tab={tab} go={go} pendingCount={pendingCount} user={user} />
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

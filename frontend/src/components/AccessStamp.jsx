@@ -1,5 +1,5 @@
 import React from "react";
-import { Badge } from "@/components/ui/badge";
+import { Badge, BadgeDot } from "@/components/ui/badge";
 
 export function parseAccess(content) {
   const match = content.match(/^access:\s*(\w+)/m);
@@ -20,7 +20,8 @@ const VARIANT_BY_ACCESS = {
 export default function AccessStamp({ access, className }) {
   if (!access || access === "unknown") return null;
   return (
-    <Badge variant={VARIANT_BY_ACCESS[access] || "outline"} className={`stamp-badge shrink-0 -rotate-2 ${className || ""}`}>
+    <Badge variant={VARIANT_BY_ACCESS[access] || "outline"} className={`shrink-0 ${className || ""}`}>
+      <BadgeDot />
       {access}
     </Badge>
   );
