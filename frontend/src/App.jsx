@@ -9,6 +9,7 @@ import ReviewPanel from "./components/ReviewPanel.jsx";
 import SpendPanel from "./components/SpendPanel.jsx";
 import ThemeToggle from "./components/ThemeToggle.jsx";
 import steguLogo from "./assets/stegu-logo.svg";
+import { cn } from "@/lib/utils";
 
 export default function App() {
   const [tab, setTab] = useState("ask");
@@ -61,7 +62,15 @@ export default function App() {
         <div className="flex h-screen overflow-hidden mobile:flex-col">
           <Sidebar tab={tab} setTab={setTab} />
           <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-            {tab === "ask" && <ChatPanel onOpenInBrowse={openInBrowse} />}
+            {/* Kept mounted (just hidden) instead of conditionally rendered
+                like the other tabs — those refetch fresh on every visit and
+                have nothing to lose, but ChatPanel's message history and
+                in-session memory live in its own local state, and would be
+                wiped every time a citation chip sends the user to Prohlížet
+                and back if it were unmounted in between. */}
+            <div className={cn("h-full", tab !== "ask" && "hidden")}>
+              <ChatPanel onOpenInBrowse={openInBrowse} />
+            </div>
             {tab === "ingest" && <IngestPanel />}
             {tab === "pending-review" && <PendingReviewPanel />}
             {tab === "browse" && <BrowsePanel initialPath={browsePath} />}
