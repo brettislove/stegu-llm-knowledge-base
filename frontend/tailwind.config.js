@@ -33,6 +33,29 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        gold: {
+          DEFAULT: "hsl(var(--gold))",
+          dark: "hsl(var(--gold-dark))",
+          tint: "hsl(var(--gold-tint))",
+          "tint-border": "hsl(var(--gold-tint-border))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+          tint: "hsl(var(--success-tint))",
+          "tint-border": "hsl(var(--success-tint-border))",
+        },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          foreground: "hsl(var(--info-foreground))",
+          tint: "hsl(var(--info-tint))",
+        },
+        warn: {
+          tint: "hsl(var(--warn-tint))",
+          "tint-border": "hsl(var(--warn-tint-border))",
+        },
+        "chart-cache": "hsl(var(--chart-cache))",
+        "chart-new": "hsl(var(--chart-new))",
         public: "hsl(var(--public))",
         internal: "hsl(var(--internal))",
         restricted: "hsl(var(--restricted))",
@@ -42,8 +65,11 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      boxShadow: {
+        brand: "var(--shadow)",
+      },
       fontFamily: {
-        display: ["Fraunces", "Georgia", "serif"],
+        display: ["Playfair Display", "Georgia", "serif"],
         body: ["Inter", "-apple-system", "sans-serif"],
         mono: ["IBM Plex Mono", "ui-monospace", "monospace"],
       },

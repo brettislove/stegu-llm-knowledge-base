@@ -2,38 +2,123 @@
 @tailwind components;
 @tailwind utilities;
 
+/* STEGU brand palette (see brand manual + the approved mockup at
+   https://claude.ai/code/artifact/3d48781e-bea1-47cd-adfe-dde04152ec9c).
+   Every value below is the exact converted HSL of the manual's hex specs
+   — not a "close enough" shadcn default. --public/--internal/--restricted
+   map onto the brand's success/gold-dark/red-dark hues respectively,
+   since those semantics (public=safe/green, internal=caution/amber,
+   restricted=stop/red) already lined up with the original scheme. */
 @layer base {
   :root {
-    --background: 80 8% 93%;
-    --foreground: 135 6% 13%;
+    --background: 30 27.3% 95.7%;   /* warm white #F7F4F1 */
+    --foreground: 0 0% 10.2%;       /* ink #1A1A1A */
 
-    --card: 0 0% 100%;
-    --card-foreground: 135 6% 13%;
+    --card: 0 0% 100%;              /* paper #FFFFFF */
+    --card-foreground: 0 0% 10.2%;
+    --card-index: 30 27.3% 95.7%;
 
-    --card-index: 45 33% 98%; /* slightly warm off-white for index cards */
-
-    --primary: 354 73.5% 41.4%;         /* stegu red */
+    --primary: 354.2 73.5% 41.4%;   /* stegu red #B71C2B */
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 354 73.5% 30%; /* slightly darker stegu red for hover state */
+    --primary-hover: 353.1 74.2% 32.0%; /* red-dark #8E1523 */
 
-    --secondary: 80 8% 93%;
-    --secondary-foreground: 135 6% 13%;
+    --secondary: 30 27.3% 95.7%;
+    --secondary-foreground: 0 0% 10.2%;
 
-    --muted: 80 8% 93%;
-    --muted-foreground: 94 3% 42%;
+    --muted: 30 27.3% 95.7%;
+    --muted-foreground: 24 5.8% 33.7%; /* ink-soft #5B5551 */
 
-    --accent: 80 8% 90%;
-    --accent-foreground: 135 6% 13%;
+    --accent: 32.3 21.3% 91%;
+    --accent-foreground: 0 0% 10.2%;
 
-    --border: 70 7% 84%;
-    --input: 70 7% 84%;
-    --ring: 22 27% 33%;
+    --border: 32.3 21.3% 88.0%;     /* line #E7E1DA */
+    --input: 32.3 21.3% 88.0%;
+    --ring: 354.2 73.5% 41.4%;      /* focus ring = brand red */
 
-    --public: 138 26% 33%;
-    --internal: 41 49% 36%;
-    --restricted: 7 55% 38%;
+    --gold: 37.8 70.6% 52.0%;       /* #DB9B2E — reserved for cost/price figures */
+    --gold-dark: 34.7 64.9% 40.2%;  /* #A97124 */
+    --gold-tint: 39.4 84.2% 92.5%;
+    --gold-tint-border: 42.9 73.7% 77.6%;
 
-    --radius: 0.25rem;
+    --success: 143.2 59.7% 26.3%;   /* #1B6B3A */
+    --success-foreground: 0 0% 100%;
+    --success-tint: 140 33.3% 92.9%;
+    --success-tint-border: 142.5 32.7% 80.8%;
+
+    --info: 203.9 61.3% 42.5%;      /* #2A7AAF */
+    --info-foreground: 0 0% 100%;
+    --info-tint: 204 48.4% 93.9%;
+
+    --warn-tint: 356.2 66.7% 95.3%;         /* red-tint #FBEBEC */
+    --warn-tint-border: 354.3 58.3% 85.9%;  /* red-tint-border #F0C6CA */
+
+    /* Cache-vs-new-token proportion bars (Náklady) — deliberately NOT the
+       raw --success/--gold above. Re-tuned to pass a colorblind-safety
+       validator (OKLab lightness band + CVD ΔE) against each mode's
+       surface; the raw brand hues fail contrast on the dark surface. */
+    --chart-cache: 143.2 59.7% 26.3%;
+    --chart-new: 37.8 70.6% 52.0%;
+
+    --public: 143.2 59.7% 26.3%;    /* = --success */
+    --internal: 34.7 64.9% 40.2%;   /* = --gold-dark */
+    --restricted: 353.1 74.2% 32.0%; /* = --red-dark */
+
+    --shadow: 0 1px 2px rgba(26,20,17,.04), 0 8px 24px -12px rgba(26,20,17,.14);
+
+    --radius: 0.625rem; /* 10px, matches the mockup's softer corners */
+  }
+
+  .dark {
+    --background: 22.5 13.8% 11.4%; /* #211C19 */
+    --foreground: 30 27.8% 92.9%;   /* #F2EDE8 */
+
+    --card: 30 21.1% 7.5%;          /* #17130F */
+    --card-foreground: 30 27.8% 92.9%;
+    --card-index: 22.5 13.8% 11.4%;
+
+    --primary: 354.2 73.5% 41.4%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 353.1 74.2% 45%;
+
+    --secondary: 22.5 13.8% 11.4%;
+    --secondary-foreground: 30 27.8% 92.9%;
+
+    --muted: 22.5 13.8% 11.4%;
+    --muted-foreground: 28.4 11.9% 68.8%; /* #B9AFA6 */
+
+    --accent: 25.7 13.7% 20.0%;
+    --accent-foreground: 30 27.8% 92.9%;
+
+    --border: 25.7 13.7% 20.0%;     /* #3A322C */
+    --input: 25.7 13.7% 20.0%;
+    --ring: 354.2 73.5% 41.4%;
+
+    --gold: 37.8 70.6% 52.0%;
+    --gold-dark: 34.7 64.9% 55%;
+    --gold-tint: 35.5 75.9% 11.4%;       /* #332107 */
+    --gold-tint-border: 37.5 64.3% 22.0%; /* #5C4114 */
+
+    --success: 143.2 59.7% 36%;
+    --success-foreground: 0 0% 100%;
+    --success-tint: 142.5 40.0% 11.8%;      /* #122A1B */
+    --success-tint-border: 142.3 41.0% 20.6%; /* #1F4A2F */
+
+    --info: 203.9 61.3% 52%;
+    --info-foreground: 0 0% 100%;
+    --info-tint: 203.1 41.9% 12.2%; /* #12222C */
+
+    --warn-tint: 353.7 48.7% 15.3%;         /* #3A1418 */
+    --warn-tint-border: 354.2 50.8% 23.9%;  /* #5C1E24 */
+
+    /* CVD-validated dark-surface variants — see the note under :root. */
+    --chart-cache: 152.1 54.9% 40.0%;  /* #2e9e6a */
+    --chart-new: 33.7 61.8% 44.1%;     /* #b6792b */
+
+    --public: 143.2 59.7% 36%;
+    --internal: 34.7 64.9% 55%;
+    --restricted: 353.1 74.2% 45%;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.65);
   }
 }
 
@@ -43,15 +128,6 @@
   }
   body {
     @apply bg-background text-foreground font-body;
-    font-size: 14px;
+    font-size: 15px;
   }
-}
-
-@keyframes stamp-in {
-  from { opacity: 0; transform: rotate(3deg) scale(1.3); }
-  to { opacity: 1; transform: rotate(3deg) scale(1); }
-}
-
-.stamp-badge {
-  animation: stamp-in 0.3s ease;
 }
