@@ -4,10 +4,12 @@ import { cn } from "@/lib/utils";
 
 const Tabs = TabsPrimitive.Root;
 
+// Segmented-control look from the mockup: muted track, active segment is a
+// raised card-colored pill with brand-red text — not a solid-red fill.
 const TabsList = React.forwardRef(({ className, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
-    className={cn("inline-flex items-center rounded-md border border-border bg-card p-0.5", className)}
+    className={cn("inline-flex items-center gap-0.5 rounded-lg border border-border bg-muted p-[3px]", className)}
     {...props}
   />
 ));
@@ -17,8 +19,8 @@ const TabsTrigger = React.forwardRef(({ className, ...props }, ref) => (
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-xs font-mono transition-colors",
-      "text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground",
+      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3.5 py-1.5 text-[13px] font-semibold transition-colors",
+      "text-muted-foreground data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-brand",
       className
     )}
     {...props}

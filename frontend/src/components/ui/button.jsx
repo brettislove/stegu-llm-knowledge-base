@@ -8,7 +8,19 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        // Primary — solid brand red. The dominant action everywhere.
         default: "bg-primary text-primary-foreground hover:bg-[hsl(var(--primary-hover))]",
+        // Outline — red border on white/card, matches the mockup's
+        // secondary CTA (e.g. "Zobrazit varianty").
+        outline: "bg-card text-primary border border-primary hover:bg-warn-tint",
+        // Dark — solid ink, for de-emphasized-but-firm actions (e.g. a
+        // future "Stáhnout katalog").
+        dark: "bg-foreground text-background hover:opacity-90",
+        // Muted — quiet/secondary actions that shouldn't compete for
+        // attention (e.g. "Zpět na výběr").
+        muted: "bg-muted text-muted-foreground border border-border hover:bg-accent",
+        // Success — approve-style actions (Schválit).
+        success: "bg-success text-success-foreground hover:opacity-90",
         secondary: "bg-card text-foreground border border-border hover:bg-muted",
         ghost: "hover:bg-muted text-foreground",
         link: "text-muted-foreground underline-offset-4 hover:underline",
