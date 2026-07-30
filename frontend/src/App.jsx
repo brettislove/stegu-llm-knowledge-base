@@ -1,50 +1,73 @@
 import React, { useState } from "react";
-import { SignedIn, SignedOut, SignIn, UserButton } from "@clerk/clerk-react";
+import { SignedIn, SignedOut, SignIn } from "@clerk/clerk-react";
 import Sidebar from "./components/Sidebar.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
 import IngestPanel from "./components/IngestPanel.jsx";
+import PendingReviewPanel from "./components/PendingReviewPanel.jsx";
+import BrowsePanel from "./components/BrowsePanel.jsx";
 import ReviewPanel from "./components/ReviewPanel.jsx";
-import CitedPagesPanel from "./components/CitedPagesPanel.jsx";
-import FileViewerModal from "./components/FileViewerModal.jsx";
+import SpendPanel from "./components/SpendPanel.jsx";
+import ThemeToggle from "./components/ThemeToggle.jsx";
+import steguLogo from "./assets/stegu-logo.svg";
 
 export default function App() {
   const [tab, setTab] = useState("ask");
-  const [citedPaths, setCitedPaths] = useState([]);
-  const [openFile, setOpenFile] = useState(null);
+  const [browsePath, setBrowsePath] = useState(null);
 
-  function addCitedPaths(paths) {
-    setCitedPaths((prev) => [...new Set([...paths, ...prev])].slice(0, 8));
+  // Citation chips in ChatPanel call this to jump straight to the file
+  // they cited, instead of feeding an always-visible side panel — the IA
+  // change chosen over the prior CitedPagesPanel/FileViewerModal pair.
+  function openInBrowse(path) {
+    setBrowsePath(path);
+    setTab("browse");
   }
 
   return (
     <>
+      <ThemeToggle />
       <SignedOut>
-        <div className="grid h-screen place-items-center">
-          <SignIn />
+        <div className="flex min-h-screen items-center justify-center bg-primary p-6">
+          <div className="w-full max-w-md rounded-xl bg-card p-10 shadow-brand">
+            <div className="mb-6 flex flex-col items-center gap-1.5 text-center">
+              <img src={steguLogo} alt="Stegu" className="h-8 w-auto" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                LLM Wiki
+              </span>
+            </div>
+            {/* Scoped to this instance only — the provider-level
+                appearance (main.jsx) keeps Clerk's normal card chrome,
+                which the UserButton popover in Sidebar.jsx also relies
+                on. Stripping it there breaks that popover's floating-card
+                styling. Here, embedded inside our own branded card, the
+                chrome would double up and overflow on mobile, so this
+                instance forces it to flow as plain full-width content. */}
+            <SignIn
+              appearance={{
+                elements: {
+                  rootBox: "w-full px-5",
+                  // The dark baseTheme (main.jsx) puts its own drop shadow
+                  // on cardBox specifically, not card — missing it here is
+                  // what read as a second nested card floating inside ours.
+                  cardBox: "w-full px-1 shadow-none",
+                  card: "w-full shadow-none border-0 bg-transparent p-0",
+                },
+              }}
+            />
+          </div>
         </div>
       </SignedOut>
 
       <SignedIn>
-        <div className="grid h-screen grid-cols-[220px_1fr_300px] overflow-hidden mobile:h-auto mobile:min-h-screen mobile:grid-cols-1 mobile:grid-rows-[auto_1fr_auto]">
-          <div className="min-h-0 overflow-hidden mobile:max-h-[260px]">
-            <Sidebar tab={tab} setTab={setTab} onOpenFile={setOpenFile} />
-          </div>
-
-          <div className="min-h-0 min-w-0 overflow-hidden">
-            {tab === "ask" && <ChatPanel onCitedPaths={addCitedPaths} />}
+        <div className="flex h-screen overflow-hidden mobile:flex-col">
+          <Sidebar tab={tab} setTab={setTab} />
+          <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
+            {tab === "ask" && <ChatPanel onOpenInBrowse={openInBrowse} />}
             {tab === "ingest" && <IngestPanel />}
-            {tab === "review" && <ReviewPanel />}
+            {tab === "pending-review" && <PendingReviewPanel />}
+            {tab === "browse" && <BrowsePanel initialPath={browsePath} />}
+            {tab === "feedback" && <ReviewPanel />}
+            {tab === "spend" && <SpendPanel />}
           </div>
-
-          <div className="min-h-0 overflow-hidden mobile:max-h-[260px]">
-            <CitedPagesPanel paths={citedPaths} />
-          </div>
-
-          <div className="fixed bottom-3 right-3">
-            <UserButton />
-          </div>
-
-          <FileViewerModal path={openFile} open={!!openFile} onOpenChange={(v) => !v && setOpenFile(null)} />
         </div>
       </SignedIn>
     </>

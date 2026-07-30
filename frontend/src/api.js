@@ -20,8 +20,8 @@ async function request(path, options = {}) {
 }
 
 export const api = {
-  query: (question, mode) =>
-    request("/query", { method: "POST", body: JSON.stringify({ question, mode }) }),
+  query: (question, mode, history) =>
+    request("/query", { method: "POST", body: JSON.stringify({ question, mode, history }) }),
 
   // Updated to accept unified file_base64 parameter
   ingest: (filename, file_base64) =>
@@ -41,6 +41,19 @@ export const api = {
     request(`/wiki/files${subdir ? `?subdir=${encodeURIComponent(subdir)}` : ""}`),
 
   getFile: (path) => request(`/wiki/file?path=${encodeURIComponent(path)}`),
+
+  getPendingReview: () => request("/pending-review"),
+
+  approvePendingReview: (queueId, overrides = {}) =>
+    request(`/pending-review/${encodeURIComponent(queueId)}/approve`, {
+      method: "POST",
+      body: JSON.stringify(overrides),
+    }),
+
+  rejectPendingReview: (queueId) =>
+    request(`/pending-review/${encodeURIComponent(queueId)}/reject`, { method: "POST" }),
+
+  getSpend: (range = "week") => request(`/spend?range=${encodeURIComponent(range)}`),
 };
 
 export function pdfToBase64(file) {
