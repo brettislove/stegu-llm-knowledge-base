@@ -74,16 +74,23 @@ def _dispatch(tool_name: str, tool_input: dict) -> str:
     raise ValueError(f"Unknown tool for classify agent: {tool_name}")
 
 
-def classify_document(filename: str, content_for_llm) -> dict:
+def classify_document(filename: str, content_for_llm) -> tuple:
     """
     content_for_llm: either a list of content blocks (e.g. a PDF document
     block, for native Claude reading) or a plain markdown string — same
     shape the ingest/writer agent expects.
 
-    Returns the propose_classification tool's input dict, e.g.:
-    {"category": "produkty", "topic": "", "doc_type": "catalog",
-     "title": "...", "access": "public", "is_update_to": "",
-     "confidence": "high", "reasoning": "..."}
+    Returns (classification, usage):
+    - classification: the propose_classification tool's input dict, e.g.
+      {"category": "produkty", "topic": "", "doc_type": "catalog",
+       "title": "...", "access": "public", "is_update_to": "",
+       "confidence": "high", "reasoning": "..."}
+    - usage: {"input_tokens", "output_tokens", "cache_creation_tokens",
+      "cache_read_tokens"} — same shape agentic_loop.run_agent_loop
+      returns, for the Náklady dashboard's cost estimate. This agent has
+      its own loop (it exits on a specific tool call, not "no more tool
+      calls", so it can't just delegate to run_agent_loop) but tracks
+      usage the same way.
     """
     # SCHEMA_PATH is a OneDrive path string (Graph-backed), not a local
     # Path — reading it means a real network call via graph_client, done
@@ -115,6 +122,13 @@ def classify_document(filename: str, content_for_llm) -> dict:
     cached_tools = [dict(t) for t in CLASSIFY_TOOLS]
     cached_tools[-1] = {**cached_tools[-1], "cache_control": {"type": "ephemeral"}}
 
+    usage = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_creation_tokens": 0,
+        "cache_read_tokens": 0,
+    }
+
     for _ in range(MAX_TURNS):
         response = client.messages.create(
             model=MODEL,
@@ -123,6 +137,15 @@ def classify_document(filename: str, content_for_llm) -> dict:
             tools=cached_tools,
             messages=messages,
         )
+        usage["input_tokens"] += getattr(response.usage, "input_tokens", 0) or 0
+        usage["output_tokens"] += getattr(response.usage, "output_tokens", 0) or 0
+        usage["cache_creation_tokens"] += (
+            getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+        )
+        usage["cache_read_tokens"] += (
+            getattr(response.usage, "cache_read_input_tokens", 0) or 0
+        )
+
         assistant_content = [block.model_dump() for block in response.content]
         messages.append({"role": "assistant", "content": assistant_content})
 
@@ -135,7 +158,7 @@ def classify_document(filename: str, content_for_llm) -> dict:
             None,
         )
         if classification_block:
-            return classification_block.input
+            return classification_block.input, usage
 
         if response.stop_reason != "tool_use":
             final_text = "".join(b.text for b in response.content if b.type == "text")

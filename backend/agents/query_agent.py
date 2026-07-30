@@ -81,7 +81,17 @@ def _dispatch(tool_name: str, tool_input: dict) -> str:
     raise ValueError(f"Unknown tool for query agent: {tool_name}")
 
 
-def answer_query(question: str, mode: str = "internal") -> dict:
+def answer_query(question: str, mode: str = "internal", history: list = None) -> dict:
+    """
+    `history`, when given, is the prior turns of this chat session
+    (`[{"role": "user"|"assistant", "content": str}, ...]`) — lets a
+    follow-up question ("a co ta druhá dlažba?") resolve against what was
+    already asked/answered in this session, without persisting anything
+    server-side. Each turn is seeded straight into the agent loop's
+    message list (see agentic_loop.run_agent_loop's `history` param), so
+    the model sees real alternating conversation structure, not a
+    flattened text blob.
+    """
     if mode not in {"internal", "public"}:
         raise ValueError("mode must be 'internal' or 'public'")
     # SCHEMA_PATH is a OneDrive path string now, not a local Path — reading
@@ -89,4 +99,6 @@ def answer_query(question: str, mode: str = "internal") -> dict:
     schema_text = file_tools.read_project_file(SCHEMA_PATH)
     access_rule = PUBLIC_RULE if mode == "public" else INTERNAL_RULE
     system_prompt = SYSTEM_PROMPT.format(access_rule=access_rule, schema=schema_text)
-    return run_agent_loop(system_prompt, question, QUERY_TOOLS, _dispatch)
+    return run_agent_loop(
+        system_prompt, question, QUERY_TOOLS, _dispatch, history=history
+    )

@@ -8,7 +8,7 @@ send -> tool_use -> execute -> tool_result -> repeat cycle until Claude
 returns a final text answer.
 """
 import json
-from typing import Callable, List, Union
+from typing import Callable, List, Optional, Union
 
 import anthropic
 
@@ -28,14 +28,24 @@ def run_agent_loop(
     tools: List[dict],
     dispatch: Callable[[str, dict], str],
     max_turns: int = MAX_TURNS,
+    history: Optional[List[dict]] = None,
 ) -> dict:
     """
-    Returns {"final_text": str, "transcript": list, "turns": int, "cache_read_tokens": int}.
+    Returns {"final_text": str, "transcript": list, "turns": int,
+    "usage": {"input_tokens", "output_tokens", "cache_creation_tokens",
+    "cache_read_tokens"}} — the usage totals feed the Náklady dashboard's
+    cost estimate (see tools/pricing.py).
 
     `dispatch(tool_name, tool_input)` executes one tool call and returns a
     string result. Exceptions are caught and surfaced back to Claude as a
     tool error (is_error=True) so it can recover or explain, rather than
     crashing the whole request.
+
+    `history`, when given, is a list of prior `{"role": "user"|"assistant",
+    "content": ...}` turns prepended before `user_message` — this is how a
+    caller (currently only query_agent, for in-session chat follow-ups)
+    seeds multi-turn context. Every other caller leaves it at the default,
+    which reproduces the exact single-turn behavior this loop always had.
 
     Both the system prompt (which embeds the full SCHEMA.md, ~9KB) and the
     tool definitions are marked cacheable. They're identical across every
@@ -43,7 +53,8 @@ def run_agent_loop(
     SCHEMA.md changes — so this turns "resend ~9KB every turn" into
     "pay for it once, then reuse."
     """
-    messages = [{"role": "user", "content": user_message}]
+    messages = list(history) if history else []
+    messages.append({"role": "user", "content": user_message})
     transcript = []
 
     # Cache breakpoint: everything up to and including this block is cached.
@@ -54,7 +65,12 @@ def run_agent_loop(
     if cached_tools:
         cached_tools[-1] = {**cached_tools[-1], "cache_control": {"type": "ephemeral"}}
 
-    total_cache_read = 0
+    total_usage = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_creation_tokens": 0,
+        "cache_read_tokens": 0,
+    }
 
     for turn in range(max_turns):
         response = client.messages.create(
@@ -65,7 +81,14 @@ def run_agent_loop(
             messages=messages,
         )
 
-        total_cache_read += getattr(response.usage, "cache_read_input_tokens", 0) or 0
+        total_usage["input_tokens"] += getattr(response.usage, "input_tokens", 0) or 0
+        total_usage["output_tokens"] += getattr(response.usage, "output_tokens", 0) or 0
+        total_usage["cache_creation_tokens"] += (
+            getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+        )
+        total_usage["cache_read_tokens"] += (
+            getattr(response.usage, "cache_read_input_tokens", 0) or 0
+        )
 
         assistant_content = [block.model_dump() for block in response.content]
         messages.append({"role": "assistant", "content": assistant_content})
@@ -79,7 +102,7 @@ def run_agent_loop(
                 "final_text": final_text,
                 "transcript": transcript,
                 "turns": turn + 1,
-                "cache_read_tokens": total_cache_read,
+                "usage": total_usage,
             }
 
         tool_results = []

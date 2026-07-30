@@ -21,8 +21,8 @@ import asyncio
 import base64
 import json
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,7 +35,7 @@ from backend.agents.query_agent import answer_query
 from backend.agents.distill_agent import run_distillation
 from backend.agents.lint_agent import run_lint
 from backend.agents.split_agent import split_category
-from backend.tools import file_tools, hashing
+from backend.tools import file_tools, hashing, pricing, spend
 from backend.tools.postprocess import finalize_page, refresh_token_counts
 from backend.converters import convert_file
 from backend.config import VALID_CATEGORY
@@ -82,6 +82,11 @@ class IngestRequest(BaseModel):
 class QueryRequest(BaseModel):
     question: str
     mode: str = "internal"
+    # Prior turns of this chat session, for in-session follow-up memory —
+    # see query_agent.answer_query's docstring. Nothing is persisted
+    # server-side; the frontend resends whatever history it wants
+    # remembered on every call.
+    history: Optional[List[dict]] = None
 
 
 class FeedbackRequest(BaseModel):
@@ -96,6 +101,27 @@ class ReviewDecisionOverride(BaseModel):
     doc_type: Optional[str] = None
     title: Optional[str] = None
     access: Optional[str] = None
+
+
+def _usage_summary(usage: dict) -> dict:
+    """Small, response-embeddable summary of an agent loop's token usage —
+    lets the frontend show a per-answer/per-action cost estimate (the
+    mockup's "~1 240 tokenů (91 % z cache) · odhad 0,02 Kč" tag) without
+    every caller re-deriving cache_pct/cost_czk by hand."""
+    cache_tokens = usage.get("cache_read_tokens", 0)
+    new_tokens = (
+        usage.get("input_tokens", 0)
+        + usage.get("output_tokens", 0)
+        + usage.get("cache_creation_tokens", 0)
+    )
+    total = cache_tokens + new_tokens
+    cost_usd = pricing.estimate_cost_usd(usage)
+    return {
+        "cache_read_tokens": cache_tokens,
+        "total_tokens": total,
+        "cache_pct": round(100 * cache_tokens / total) if total else 0,
+        "cost_czk": round(pricing.usd_to_czk(cost_usd), 4),
+    }
 
 
 def _resolve_destination(classification: dict) -> str:
@@ -158,6 +184,7 @@ def _run_full_ingest(filename: str, raw_bytes: bytes, classification: dict) -> d
             f"consider running POST /split/{category}."
         )
 
+    spend.append_spend_record("ingest", result["usage"])
     file_tools.append_structured_log_entry(
         status="ingested",
         file=filename,
@@ -171,7 +198,7 @@ def _run_full_ingest(filename: str, raw_bytes: bytes, classification: dict) -> d
         "destination": destination_path,
         "summary": result["final_text"],
         "turns": result["turns"],
-        "cache_read_tokens": result.get("cache_read_tokens", 0),
+        **_usage_summary(result["usage"]),
         "split_hint": split_hint,
     }
 
@@ -217,6 +244,7 @@ def _finalize(
             f"consider running POST /split/{category}."
         )
 
+    spend.append_spend_record("ingest", result["usage"])
     file_tools.append_structured_log_entry(
         status="ingested",
         file=filename,
@@ -230,7 +258,7 @@ def _finalize(
         "destination": destination_path,
         "summary": result["final_text"],
         "turns": result["turns"],
-        "cache_read_tokens": result.get("cache_read_tokens", 0),
+        **_usage_summary(result["usage"]),
         "split_hint": split_hint,
     }
 
@@ -319,13 +347,14 @@ def _ingest_pipeline(req: IngestRequest):
         {"stage": "classify", "status": "start", "label": "Klasifikace dokumentu"}
     )
     try:
-        classification = classify_document(req.filename, content_for_llm)
+        classification, classify_usage = classify_document(req.filename, content_for_llm)
     except Exception as e:
         yield _sse({"stage": "classify", "status": "error", "message": str(e)})
         file_tools.append_structured_log_entry(
             status="failed", file=req.filename, failure=str(e)
         )
         return
+    spend.append_spend_record("classify", classify_usage)
     yield _sse(
         {
             "stage": "classify",
@@ -421,7 +450,9 @@ async def ingest(req: IngestRequest):
                 raise HTTPException(status_code=400, detail=str(e))
 
             try:
-                classification = classify_document(req.filename, content_for_llm)
+                classification, classify_usage = classify_document(
+                    req.filename, content_for_llm
+                )
             except Exception as e:
                 file_tools.append_structured_log_entry(
                     status="failed", file=req.filename, failure=str(e)
@@ -429,6 +460,7 @@ async def ingest(req: IngestRequest):
                 raise HTTPException(
                     status_code=500, detail=f"Classification failed: {e}"
                 )
+            spend.append_spend_record("classify", classify_usage)
 
             if classification.get("confidence") == "low":
                 return _queue_for_review(req.filename, raw_bytes, classification)
@@ -567,7 +599,12 @@ async def split(category: str):
             raise HTTPException(status_code=409, detail=str(e))
         try:
             result = split_category(category)
-            return {"summary": result["final_text"], "turns": result["turns"]}
+            spend.append_spend_record("split", result["usage"])
+            return {
+                "summary": result["final_text"],
+                "turns": result["turns"],
+                **_usage_summary(result["usage"]),
+            }
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
         finally:
@@ -579,14 +616,52 @@ def get_manifest():
     return hashing.load_manifest()
 
 
+_SPEND_RANGE_DAYS = {"today": 1, "week": 7, "month": 30}
+
+
+@app.get("/spend")
+def get_spend(range: str = "week"):
+    """Náklady dashboard data. `range` scopes the top-line totals/table;
+    the `daily` trend series is always the trailing 7 calendar days,
+    independent of `range` (same as the mockup's "Vývoj za posledních
+    7 dní" widget, which never followed the period selector)."""
+    now = datetime.now(timezone.utc)
+    range_days = _SPEND_RANGE_DAYS.get(range, 7)
+    range_since = now - timedelta(days=range_days)
+    seven_days_ago = now - timedelta(days=7)
+    fetch_since = min(range_since, seven_days_ago)
+
+    records = spend.load_spend_records(since=fetch_since)
+    range_records = [
+        r
+        for r in records
+        if _safe_parse_timestamp(r.get("timestamp")) is not None
+        and _safe_parse_timestamp(r["timestamp"]) >= range_since
+    ]
+
+    result = spend.aggregate(range_records)
+    result["daily"] = spend.aggregate(records)["daily"]
+    return result
+
+
+def _safe_parse_timestamp(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 @app.post("/query")
 def query(req: QueryRequest):
     try:
-        result = answer_query(req.question, req.mode)
+        result = answer_query(req.question, req.mode, req.history)
+        spend.append_spend_record("query", result["usage"])
         return {
             "answer": result["final_text"],
             "turns": result["turns"],
-            "cache_read_tokens": result.get("cache_read_tokens", 0),
+            **_usage_summary(result["usage"]),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -618,10 +693,11 @@ def distill():
     try:
         result = run_distillation()
         refreshed = refresh_token_counts()
+        spend.append_spend_record("distill", result["usage"])
         return {
             "summary": result["final_text"],
             "turns": result["turns"],
-            "cache_read_tokens": result.get("cache_read_tokens", 0),
+            **_usage_summary(result["usage"]),
             "token_counts_refreshed": refreshed,
         }
     except Exception as e:
@@ -633,10 +709,11 @@ def lint():
     """Report-only wiki health check. Writes lint-report.md, fixes nothing."""
     try:
         result = run_lint()
+        spend.append_spend_record("lint", result["usage"])
         return {
             "summary": result["final_text"],
             "turns": result["turns"],
-            "cache_read_tokens": result.get("cache_read_tokens", 0),
+            **_usage_summary(result["usage"]),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

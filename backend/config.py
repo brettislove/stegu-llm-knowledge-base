@@ -69,6 +69,18 @@ CLAUDE_MD_PATH = f"{ONEDRIVE_PROJECT_ROOT}/CLAUDE.md"
 INGEST_LOCK_PATH = f"{ONEDRIVE_PROJECT_ROOT}/_system/ingest.lock"
 INGEST_LOCK_STALE_SECONDS = 600
 
+# Spend/usage telemetry (Náklady dashboard) — one JSON line per API-calling
+# action, in the same _system/ operational folder as the ingest lock.
+# Numeric/aggregable by nature, so JSONL from day one rather than the
+# prose-style log.md.
+SPEND_LOG_PATH = f"{ONEDRIVE_PROJECT_ROOT}/_system/spend.jsonl"
+
+# Fixed approximate USD->CZK rate for the cost estimate shown in the
+# Náklady dashboard — NOT live FX. Fine for an internal "roughly how much"
+# figure; do not use this for accounting. Override via env var if the rate
+# drifts enough to matter.
+CZK_PER_USD = float(os.environ.get("CZK_PER_USD", "21.5"))
+
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5")
 
