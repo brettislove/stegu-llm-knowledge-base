@@ -43,8 +43,8 @@ function NavContent({ tab, go, pendingCount, user }) {
     <div className="flex h-full flex-col overflow-hidden bg-card px-4 pb-4 pt-[22px]">
       <div className="flex flex-col gap-1 px-1">
         <img src={steguLogo} alt="Stegu" className="h-[22px] w-auto" />
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Interní panel · wiki
+        <span className="text-[10px] text-center font-semibold uppercase tracking-wide text-muted-foreground">
+          LLM Wiki
         </span>
       </div>
 
