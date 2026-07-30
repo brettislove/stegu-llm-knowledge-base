@@ -6,6 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+// entry.status comes straight from feedback_log.md's own "status: <word>"
+// field (English by design — parsed by the backend's distill step too), so
+// only the displayed label is translated here, not the underlying value.
+const STATUS_LABELS = {
+  processed: "zpracováno",
+  unprocessed: "nezpracováno",
+  unknown: "neznámé",
+};
+
 export default function ReviewPanel() {
   const [feedbackLog, setFeedbackLog] = useState("");
   const [lessons, setLessons] = useState("");
@@ -83,7 +92,9 @@ export default function ReviewPanel() {
       <div className="flex-1 overflow-y-auto px-7 py-5">
         <div className="flex flex-wrap items-center gap-3">
           <Button onClick={runDistill} disabled={busy || unprocessedCount === 0}>
-            {busy ? "Distilling…" : `Run distillation${unprocessedCount ? ` (${unprocessedCount} pending)` : ""}`}
+            {busy
+              ? "Probíhá destilace…"
+              : `Spustit destilaci${unprocessedCount ? ` (${unprocessedCount} čeká)` : ""}`}
           </Button>
           <Tabs value={view} onValueChange={setView}>
             <TabsList>
@@ -116,7 +127,7 @@ export default function ReviewPanel() {
                   <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
                     <span className="font-mono text-[11px] text-muted-foreground">{entry.date}</span>
                     <Badge variant={entry.status === "processed" ? "public" : "internal"}>
-                      {entry.status}
+                      {STATUS_LABELS[entry.status] || entry.status}
                     </Badge>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-2 pt-0 text-sm">
@@ -147,17 +158,17 @@ export default function ReviewPanel() {
           <Card>
             <CardContent className="p-4">
               <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
-                {feedbackLog || "(empty)"}
+                {feedbackLog || "(prázdné)"}
               </pre>
             </CardContent>
           </Card>
         )}
 
         {/* --- Lessons --- */}
-        <h2 className="mt-7 mb-2 font-display text-base font-semibold">Standing lessons</h2>
+        <h2 className="mt-7 mb-2 font-display text-base font-semibold">Trvalá poučení</h2>
         {view === "parsed" ? (
           lessonSections.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No lessons distilled yet.</p>
+            <p className="text-sm text-muted-foreground">Zatím nebyla destilována žádná poučení.</p>
           ) : (
             <div className="flex flex-col gap-3">
               {lessonSections.map((section, i) => (
@@ -180,7 +191,7 @@ export default function ReviewPanel() {
           <Card>
             <CardContent className="p-4">
               <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
-                {lessons || "(empty)"}
+                {lessons || "(prázdné)"}
               </pre>
             </CardContent>
           </Card>
@@ -188,15 +199,14 @@ export default function ReviewPanel() {
 
         {/* --- Wiki health (lint) --- */}
         <div className="mt-8 flex items-center justify-between">
-          <h2 className="font-display text-base font-semibold">Wiki health</h2>
+          <h2 className="font-display text-base font-semibold">Stav wiki</h2>
           <Button variant="secondary" size="sm" onClick={runLintCheck} disabled={lintBusy}>
-            {lintBusy ? "Checking…" : "Run wiki health check"}
+            {lintBusy ? "Kontroluji…" : "Spustit kontrolu wiki"}
           </Button>
         </div>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Checks for orphan pages, broken references, stale claims, missing
-          frontmatter, and contradictions. Report-only — nothing here gets fixed
-          automatically.
+          Kontroluje osiřelé stránky, nefunkční odkazy, zastaralá tvrzení, chybějící
+          frontmatter a rozpory. Pouze reportuje — nic se zde automaticky neopravuje.
         </p>
         {lintSummary && (
           <Card className="mt-3 border-l-[3px] border-l-primary">
@@ -206,7 +216,7 @@ export default function ReviewPanel() {
         <Card className="mt-3">
           <CardContent className="p-4">
             <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
-              {lintReport || "(empty)"}
+              {lintReport || "(prázdné)"}
             </pre>
           </CardContent>
         </Card>

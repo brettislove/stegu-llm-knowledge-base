@@ -9,7 +9,7 @@ const DAY_LABELS = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
 // per API call), but the dashboard groups them into one "Nahrání" row —
 // same 3-group breakdown as the mockup (Dotazy / Nahrání / Údržba).
 const GROUPS = [
-  { label: "Dotazy (Ptát se)", keys: ["query"] },
+  { label: "Dotazy (Chat)", keys: ["query"] },
   { label: "Nahrání (Nahrát)", keys: ["classify", "ingest"] },
   { label: "Údržba (lint, distill, split)", keys: ["distill", "lint", "split"] },
 ];

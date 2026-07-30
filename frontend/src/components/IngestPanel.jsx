@@ -166,8 +166,7 @@ export default function IngestPanel() {
       <div className="border-b border-border px-7 pb-3.5 pt-5">
         <h1 className="font-display text-[22px] font-semibold">Přidat dokument</h1>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Drop in a source file (.pdf, .md, .markdown, .txt, .docx, .xlsx, .csv).
-          Document structures and tabular content are auto-parsed for the agent.
+          Vložte zdrojové soubory (.pdf, .md, .markdown, .txt, .docx, .xlsx, .csv). Systém je zpracuje a uloží do wiki.
         </p>
       </div>
       <div className="flex-1 overflow-y-auto px-7 py-5">

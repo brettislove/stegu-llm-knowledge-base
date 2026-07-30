@@ -8,7 +8,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import steguLogo from "@/assets/stegu-logo.svg";
 
 const NAV_ITEMS = [
-  { id: "ask", label: "Ptát se", icon: MessageSquare },
+  { id: "ask", label: "Chat", icon: MessageSquare },
   { id: "ingest", label: "Nahrát", icon: Upload },
   { id: "pending-review", label: "Ke kontrole", icon: Inbox, showBadge: true },
   { id: "browse", label: "Prohlížet", icon: FolderOpen },
