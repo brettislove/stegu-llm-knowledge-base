@@ -121,11 +121,21 @@ export default function IngestPanel() {
     setSteps(initialSteps());
     try {
       const base64Data = await pdfToBase64(file);
+      // This streams the raw response body, so it can't go through api.js's
+      // request() helper — but it still needs the same Clerk auth header
+      // that helper attaches, or the backend's auth middleware 401s it.
+      const token = await window.Clerk?.session?.getToken();
       const response = await fetch(`${apiUrl}/ingest/stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ filename: file.name, file_base64: base64Data }),
       });
+      if (response.status === 401) {
+        throw new Error("Přihlášení vypršelo. Obnovte stránku a zkuste to znovu.");
+      }
       if (!response.body) {
         throw new Error("Prohlížeč nepodporuje streamování odpovědi.");
       }
