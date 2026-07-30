@@ -85,7 +85,7 @@ export default function ChatPanel({ onOpenInBrowse }) {
   return (
     <div className="flex h-full flex-col bg-background">
       <div className="flex items-center justify-between gap-4 border-b border-border bg-card px-10 py-6 pr-24 mobile:pl-16">
-        <h2 className="font-display text-[26px] font-bold text-foreground">Ptát se</h2>
+        <h2 className="font-display text-[26px] font-bold text-foreground">Chat</h2>
         <Tabs value={mode} onValueChange={setMode}>
           <TabsList>
             <TabsTrigger value="internal">Interní</TabsTrigger>
