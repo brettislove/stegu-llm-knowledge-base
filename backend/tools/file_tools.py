@@ -131,6 +131,23 @@ def read_file(relative_path: str) -> str:
     return content.decode("utf-8")
 
 
+def get_folder_web_url(relative_path: str) -> Optional[str]:
+    """Returns the OneDrive `webUrl` of the folder containing
+    relative_path, or None if the folder has no such URL. Deliberately
+    the *containing folder's* webUrl rather than the file's own —
+    Graph's per-item webUrl for non-Office file types (.md included)
+    resolves to a raw-content download instead of opening a viewer,
+    so linking to the file directly triggers a download. The parent
+    folder's webUrl reliably opens OneDrive's folder listing instead."""
+    parts = PurePosixPath(relative_path).parts[:-1]
+    parent_relative = "/".join(parts)
+    folder_path = _wiki_path(parent_relative) if parent_relative else WIKI_ROOT
+    meta = graph_client.item_metadata(folder_path)
+    if meta is None:
+        raise FileNotFoundError(f"No such folder in wiki: {parent_relative or '/'}")
+    return meta.get("webUrl")
+
+
 def read_project_file(absolute_onedrive_path: str) -> str:
     """Reads a file by its full OneDrive path (already relative to the
     drive root, NOT wiki-relative) — for files like SCHEMA_PATH and

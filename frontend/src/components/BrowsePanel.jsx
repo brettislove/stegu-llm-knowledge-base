@@ -4,7 +4,7 @@ import remarkGfm from "remark-gfm";
 import { api } from "../api.js";
 import { parseAccess, parseFrontmatterField } from "./AccessStamp.jsx";
 import { Badge, BadgeDot } from "@/components/ui/badge";
-import { Folder, FileText } from "lucide-react";
+import { Folder, FileText, Cloud } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CATEGORIES = [
@@ -71,7 +71,7 @@ export default function BrowsePanel({ initialPath }) {
     setCurrentPath(path);
     setPage(null);
     try {
-      const { content } = await api.getFile(path);
+      const { content, folderWebUrl } = await api.getFile(path);
       setPage({
         title: parseFrontmatterField(content, "title") || path.split("/").pop(),
         access: parseAccess(content),
@@ -79,6 +79,7 @@ export default function BrowsePanel({ initialPath }) {
         docType: parseFrontmatterField(content, "doc_type"),
         updated: parseFrontmatterField(content, "last_updated"),
         body: stripFrontmatter(content),
+        folderWebUrl,
       });
     } catch (e) {
       setPage({ error: e.message });
@@ -151,12 +152,25 @@ export default function BrowsePanel({ initialPath }) {
               <>
                 <div className="mb-1.5 flex items-start justify-between gap-3">
                   <h3 className="font-display text-[21px] font-bold text-foreground">{page.title}</h3>
-                  {page.access && page.access !== "unknown" && (
-                    <Badge variant={ACCESS_BADGE[page.access]?.variant || "outline"} className="shrink-0">
-                      <BadgeDot />
-                      {ACCESS_BADGE[page.access]?.label || page.access}
-                    </Badge>
-                  )}
+                  <div className="flex shrink-0 items-center gap-2">
+                    {page.folderWebUrl && (
+                      <a
+                        href={page.folderWebUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Zobrazit složku na OneDrive"
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-[hsl(var(--info))] transition-colors hover:bg-warn-tint"
+                      >
+                        <Cloud className="h-4 w-4" strokeWidth={1.8} />
+                      </a>
+                    )}
+                    {page.access && page.access !== "unknown" && (
+                      <Badge variant={ACCESS_BADGE[page.access]?.variant || "outline"}>
+                        <BadgeDot />
+                        {ACCESS_BADGE[page.access]?.label || page.access}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
                 <div className="mb-4 flex flex-wrap gap-4 text-[11.5px] text-muted-foreground">
                   {page.category && (

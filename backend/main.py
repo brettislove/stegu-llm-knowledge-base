@@ -727,9 +727,11 @@ def list_wiki_files(subdir: str = ""):
 @app.get("/wiki/file")
 def get_wiki_file(path: str):
     try:
-        return {"path": path, "content": file_tools.read_file(path)}
+        content = file_tools.read_file(path)
+        folder_web_url = file_tools.get_folder_web_url(path)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
+    return {"path": path, "content": content, "folderWebUrl": folder_web_url}
 
 
 @app.get("/health")
