@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { SignedIn, SignedOut, SignIn } from "@clerk/clerk-react";
 import Sidebar from "./components/Sidebar.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
@@ -11,9 +11,40 @@ import ThemeToggle from "./components/ThemeToggle.jsx";
 import steguLogo from "./assets/stegu-logo.svg";
 import { cn } from "@/lib/utils";
 
+const VALID_TABS = ["ask", "ingest", "pending-review", "browse", "feedback", "spend"];
+const DEFAULT_TAB = "ask";
+
+function readTabFromUrl() {
+  const tab = new URLSearchParams(window.location.search).get("tab");
+  return VALID_TABS.includes(tab) ? tab : DEFAULT_TAB;
+}
+
 export default function App() {
-  const [tab, setTab] = useState("ask");
+  const [tab, setTabState] = useState(readTabFromUrl);
   const [browsePath, setBrowsePath] = useState(null);
+
+  // Keeps the active tab in the URL (query param, not a path, since there's
+  // no SPA-fallback rewrite configured on the static host) so a reload or a
+  // shared link lands back on the same panel instead of always on Chat.
+  function setTab(nextTab) {
+    setTabState(nextTab);
+    const params = new URLSearchParams(window.location.search);
+    if (nextTab === DEFAULT_TAB) {
+      params.delete("tab");
+    } else {
+      params.set("tab", nextTab);
+    }
+    const query = params.toString();
+    window.history.pushState({ tab: nextTab }, "", query ? `?${query}` : window.location.pathname);
+  }
+
+  useEffect(() => {
+    function handlePopState() {
+      setTabState(readTabFromUrl());
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   // Citation chips in ChatPanel call this to jump straight to the file
   // they cited, instead of feeding an always-visible side panel — the IA
