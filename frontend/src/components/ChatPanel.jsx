@@ -22,7 +22,7 @@ function extractCitedPaths(text) {
 // without letting the request grow unbounded over a long session.
 const HISTORY_TURNS = 8;
 
-export default function ChatPanel({ onOpenInBrowse }) {
+export default function ChatPanel({ onOpenInBrowse, initialQuestion, onConsumeInitialQuestion }) {
   const [mode, setMode] = useState("internal");
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([]);
@@ -33,8 +33,17 @@ export default function ChatPanel({ onOpenInBrowse }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, pending]);
 
-  async function send() {
-    const question = input.trim();
+  // Lets the Domů quick-ask bar fire a question straight into the chat
+  // session it already owns, instead of duplicating message/history state.
+  useEffect(() => {
+    if (!initialQuestion) return;
+    send(initialQuestion);
+    onConsumeInitialQuestion?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuestion]);
+
+  async function send(explicitQuestion) {
+    const question = (explicitQuestion ?? input).trim();
     if (!question || pending) return;
     setInput("");
 

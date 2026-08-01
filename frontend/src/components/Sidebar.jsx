@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useUser, UserButton } from "@clerk/clerk-react";
-import { MessageSquare, Upload, Inbox, FolderOpen, Flag, BarChart3, Menu } from "lucide-react";
+import { Home, MessageSquare, Upload, Inbox, FolderOpen, Flag, BarChart3, Menu } from "lucide-react";
 import { api } from "../api.js";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import steguLogo from "@/assets/stegu-logo.svg";
 
 const NAV_ITEMS = [
+  { id: "home", label: "Domů", icon: Home },
   { id: "ask", label: "Chat", icon: MessageSquare },
   { id: "ingest", label: "Nahrát", icon: Upload },
   { id: "pending-review", label: "Ke kontrole", icon: Inbox, showBadge: true },

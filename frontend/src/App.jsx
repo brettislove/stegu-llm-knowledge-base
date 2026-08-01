@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { SignedIn, SignedOut, SignIn } from "@clerk/clerk-react";
 import Sidebar from "./components/Sidebar.jsx";
+import HomePanel from "./components/HomePanel.jsx";
 import ChatPanel from "./components/ChatPanel.jsx";
 import IngestPanel from "./components/IngestPanel.jsx";
 import PendingReviewPanel from "./components/PendingReviewPanel.jsx";
@@ -11,8 +12,8 @@ import ThemeToggle from "./components/ThemeToggle.jsx";
 import steguLogo from "./assets/stegu-logo.svg";
 import { cn } from "@/lib/utils";
 
-const VALID_TABS = ["ask", "ingest", "pending-review", "browse", "feedback", "spend"];
-const DEFAULT_TAB = "ask";
+const VALID_TABS = ["home", "ask", "ingest", "pending-review", "browse", "feedback", "spend"];
+const DEFAULT_TAB = "home";
 
 function readTabFromUrl() {
   const tab = new URLSearchParams(window.location.search).get("tab");
@@ -22,6 +23,7 @@ function readTabFromUrl() {
 export default function App() {
   const [tab, setTabState] = useState(readTabFromUrl);
   const [browsePath, setBrowsePath] = useState(null);
+  const [pendingQuestion, setPendingQuestion] = useState(null);
 
   // Keeps the active tab in the URL (query param, not a path, since there's
   // no SPA-fallback rewrite configured on the static host) so a reload or a
@@ -52,6 +54,12 @@ export default function App() {
   function openInBrowse(path) {
     setBrowsePath(path);
     setTab("browse");
+  }
+
+  // Domů's quick-ask bar calls this to fire a question straight into Chat.
+  function askInChat(question) {
+    setPendingQuestion(question);
+    setTab("ask");
   }
 
   return (
@@ -100,8 +108,13 @@ export default function App() {
                 wiped every time a citation chip sends the user to Prohlížet
                 and back if it were unmounted in between. */}
             <div className={cn("h-full", tab !== "ask" && "hidden")}>
-              <ChatPanel onOpenInBrowse={openInBrowse} />
+              <ChatPanel
+                onOpenInBrowse={openInBrowse}
+                initialQuestion={pendingQuestion}
+                onConsumeInitialQuestion={() => setPendingQuestion(null)}
+              />
             </div>
+            {tab === "home" && <HomePanel onNavigate={setTab} onAsk={askInChat} />}
             {tab === "ingest" && <IngestPanel />}
             {tab === "pending-review" && <PendingReviewPanel />}
             {tab === "browse" && <BrowsePanel initialPath={browsePath} />}
