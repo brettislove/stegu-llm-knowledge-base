@@ -5,6 +5,7 @@ import { parseFeedbackLog } from "@/lib/parseWiki";
 import { Badge, BadgeDot } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import LoadingNotice, { LoadingNoticeCompact } from "@/components/ui/loading-notice";
 import { Upload, Inbox, FolderOpen, Flag, BarChart3, Send, FileText, MessageSquareWarning } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -191,7 +192,7 @@ export default function HomePanel({ onNavigate, onAsk }) {
               onClick={() => onNavigate("pending-review")}
             >
               {pendingItems === null ? (
-                <span className="text-[11.5px] text-muted-foreground">Načítání…</span>
+                <LoadingNoticeCompact />
               ) : pendingItems.length > 0 ? (
                 <Badge variant="warn">
                   <BadgeDot />
@@ -206,7 +207,7 @@ export default function HomePanel({ onNavigate, onAsk }) {
               {pageStats ? (
                 <Stat value={pageStats.pages} unit="stránek" sub={`${pageStats.categories} kategorií`} />
               ) : (
-                <span className="text-[11.5px] text-muted-foreground">Načítání…</span>
+                <LoadingNoticeCompact />
               )}
             </Tile>
 
@@ -217,7 +218,7 @@ export default function HomePanel({ onNavigate, onAsk }) {
               onClick={() => onNavigate("feedback")}
             >
               {feedbackEntries === null ? (
-                <span className="text-[11.5px] text-muted-foreground">Načítání…</span>
+                <LoadingNoticeCompact />
               ) : feedbackEntries.length > 0 ? (
                 <Badge variant="info">{feedbackEntries.length} nevyřešených připomínek</Badge>
               ) : (
@@ -232,7 +233,7 @@ export default function HomePanel({ onNavigate, onAsk }) {
                   <Sparkline daily={spend.daily} />
                 </>
               ) : (
-                <span className="text-[11.5px] text-muted-foreground">Načítání…</span>
+                <LoadingNoticeCompact />
               )}
             </Tile>
           </div>
@@ -240,7 +241,7 @@ export default function HomePanel({ onNavigate, onAsk }) {
           <h3 className="mb-3.5 mt-8 font-display text-lg font-bold text-foreground">Vyžaduje pozornost</h3>
           <div className="overflow-hidden rounded-lg border border-border bg-card shadow-brand">
             {pendingItems === null || feedbackEntries === null ? (
-              <p className="px-[18px] py-4 text-[13px] text-muted-foreground">Načítání…</p>
+              <LoadingNotice className="px-[18px] py-4" />
             ) : attentionItems.length === 0 ? (
               <p className="px-[18px] py-4 text-[13px] text-muted-foreground">Nic nečeká na vaši pozornost.</p>
             ) : (

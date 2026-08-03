@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import LoadingNotice from "@/components/ui/loading-notice";
 import { cn } from "@/lib/utils";
 
 const DAY_LABELS = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
@@ -88,7 +89,7 @@ export default function SpendPanel() {
       <div className="min-h-0 flex-1 overflow-y-auto px-10 py-7 mobile:px-4">
         <div className="mx-auto max-w-[1040px]">
           {error && <p className="text-sm text-[hsl(var(--restricted))]">Chyba: {error}</p>}
-          {!data && !error && <p className="text-sm text-muted-foreground">Načítání…</p>}
+          {!data && !error && <LoadingNotice />}
 
           {data && (
             <>

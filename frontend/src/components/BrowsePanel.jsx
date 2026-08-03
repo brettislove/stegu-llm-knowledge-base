@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { api } from "../api.js";
 import { parseAccess, parseFrontmatterField } from "./AccessStamp.jsx";
 import { Badge, BadgeDot } from "@/components/ui/badge";
+import LoadingNotice from "@/components/ui/loading-notice";
 import { Folder, FileText, Cloud } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -139,12 +140,13 @@ export default function BrowsePanel({ initialPath }) {
           </div>
 
           <div className="min-w-0 flex-1 overflow-y-auto p-7">
-            {!currentPath && (
+            {!currentPath && loadingTree && <LoadingNotice label="Načítání znalostní báze…" />}
+            {!currentPath && !loadingTree && (
               <p className="text-sm italic text-muted-foreground">
                 Vyberte soubor vlevo, nebo klikněte na odkazovaný soubor v odpovědi na dotaz.
               </p>
             )}
-            {currentPath && !page && <p className="text-sm text-muted-foreground">Načítání…</p>}
+            {currentPath && !page && <LoadingNotice />}
             {page?.error && (
               <p className="text-sm text-[hsl(var(--restricted))]">Chyba: {page.error}</p>
             )}

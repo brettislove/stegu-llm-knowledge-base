@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import LoadingNotice from "@/components/ui/loading-notice";
 
 // entry.status comes straight from feedback_log.md's own "status: <word>"
 // field (English by design — parsed by the backend's distill step too), so
@@ -25,6 +26,7 @@ export default function ReviewPanel() {
   const [lintSummary, setLintSummary] = useState(null);
   const [error, setError] = useState(null);
   const [view, setView] = useState("parsed"); // "parsed" | "raw"
+  const [initialLoading, setInitialLoading] = useState(true);
 
   async function refresh() {
     try {
@@ -38,6 +40,8 @@ export default function ReviewPanel() {
       setLintReport(lr.content);
     } catch (e) {
       setError(e.message);
+    } finally {
+      setInitialLoading(false);
     }
   }
 
@@ -118,7 +122,9 @@ export default function ReviewPanel() {
         {/* --- Feedback --- */}
         <h2 className="mt-6 mb-2 font-display text-base font-semibold">Zpětná vazba</h2>
         {view === "parsed" ? (
-          entries.length === 0 ? (
+          initialLoading ? (
+            <LoadingNotice />
+          ) : entries.length === 0 ? (
             <p className="text-sm text-muted-foreground">Zatím nebyla zaznamenána žádná zpětná vazba.</p>
           ) : (
             <div className="flex flex-col gap-3">
@@ -167,7 +173,9 @@ export default function ReviewPanel() {
         {/* --- Lessons --- */}
         <h2 className="mt-7 mb-2 font-display text-base font-semibold">Trvalá poučení</h2>
         {view === "parsed" ? (
-          lessonSections.length === 0 ? (
+          initialLoading ? (
+            <LoadingNotice />
+          ) : lessonSections.length === 0 ? (
             <p className="text-sm text-muted-foreground">Zatím nebyla destilována žádná poučení.</p>
           ) : (
             <div className="flex flex-col gap-3">
@@ -215,9 +223,13 @@ export default function ReviewPanel() {
         )}
         <Card className="mt-3">
           <CardContent className="p-4">
-            <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
-              {lintReport || "(prázdné)"}
-            </pre>
+            {initialLoading ? (
+              <LoadingNotice />
+            ) : (
+              <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
+                {lintReport || "(prázdné)"}
+              </pre>
+            )}
           </CardContent>
         </Card>
       </div>

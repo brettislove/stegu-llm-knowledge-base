@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api } from "../api.js";
 import { Button } from "@/components/ui/button";
 import { Badge, BadgeDot } from "@/components/ui/badge";
+import LoadingNotice from "@/components/ui/loading-notice";
 import { FileText } from "lucide-react";
 
 const CATEGORIES = [
@@ -162,9 +163,7 @@ export default function PendingReviewPanel() {
       <div className="min-h-0 flex-1 overflow-y-auto px-10 py-7 mobile:px-4">
         <div className="mx-auto max-w-[1040px]">
           {error && <p className="text-sm text-[hsl(var(--restricted))]">Chyba: {error}</p>}
-          {items === null && !error && (
-            <p className="text-sm text-muted-foreground">Načítání…</p>
-          )}
+          {items === null && !error && <LoadingNotice />}
           {items && items.length === 0 && (
             <p className="text-sm text-muted-foreground">
               Žádné položky nečekají na kontrolu.
