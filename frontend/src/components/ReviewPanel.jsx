@@ -171,7 +171,7 @@ export default function ReviewPanel() {
         )}
 
         {/* --- Lessons --- */}
-        <h2 className="mt-7 mb-2 font-display text-base font-semibold">Trvalá poučení</h2>
+        <h2 className="mt-7 mb-2 font-display text-base font-semibold">Existující pravidla</h2>
         {view === "parsed" ? (
           initialLoading ? (
             <LoadingNotice />
