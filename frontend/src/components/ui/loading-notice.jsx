@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 // certainly fast (server already warm), so we only swap in the wake-up
 // explanation once a fetch has actually been hanging long enough to look
 // broken rather than just "loading".
-const WAKE_HINT_DELAY_MS = 4000;
+const WAKE_HINT_DELAY_MS = 6000;
 
 function useWakeHint() {
   const [showWakeHint, setShowWakeHint] = useState(false);
@@ -41,7 +41,7 @@ export default function LoadingNotice({ className, label = "Načítání…" }) 
       {showWakeHint && (
         <p className="max-w-sm text-[12.5px] leading-relaxed text-muted-foreground">
           Server byl uspán kvůli neaktivitě a teď se probouzí — první načtení může trvat až
-          50 sekund. Další požadavky už budou rychlé.
+          50 sekund. Další požadavky už se budou načítat v normálním režimu.
         </p>
       )}
     </div>
