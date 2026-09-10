@@ -1,154 +1,119 @@
-# Knowledge Base MVP — backend
+# LLM Knowledge Base
 
-Three agents (ingest / query / distill) sharing one wiki of markdown pages,
-per `SCHEMA.md`. No vector DB — the whole wiki fits in an `index.md` scan
-plus a handful of targeted `read_file` calls, per Karpathy's llm-wiki idea.
+An internal knowledge base and Q&A assistant built for a real construction-materials e-shop, so staff (and eventually customers) can ask natural-language questions against the company's actual product catalog, pricing, certifications, and policies — with every answer traceable back to a source document.
 
-## Setup
+Built and deployed for a real client; currently in active use.
 
-```bash
-cd kb-mvp
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # then fill in ANTHROPIC_API_KEY
+## Why no vector database
+
+Most RAG systems reach for embeddings + a vector store. This one doesn't, following Andrej Karpathy's "llm-wiki" idea: at this scale (fewer than ~200 documents), the entire knowledge base fits in an `index.md` scan plus a handful of targeted file reads. Claude agents navigate a plain hierarchy of markdown files via tool calls (`read_file`, `list_files`, `grep`) instead of similarity search over embeddings — simpler to reason about, easier to audit, and every answer can cite the exact page it came from.
+
+The full convention for how the wiki is structured, and how each agent is allowed to read/write it, is documented in [`SCHEMA.md`](SCHEMA.md).
+
+## How it works
+
+1. **Ingest** — a document (PDF, DOCX, XLSX, or already-converted markdown) comes in via the API or the dashboard's Ingest tab.
+2. **Classify** (LLM, read-only) — an agent proposes a category, doc type, access level, and confidence score. Low confidence → the document is queued in `pending_review/` for a human to approve or reject; nothing is written to the wiki yet.
+3. **Write** (LLM) — on high confidence (or human approval), an agent writes the page and updates the relevant index.
+4. **Finalize** (deterministic, no LLM) — hashing, token counts, and `manifest.json`/`log.md` bookkeeping happen in code, not by the model.
+5. **Query** — a separate agent answers questions by reading `index.md`, following links into the relevant section, then reading only the 2–4 most relevant source pages. Access control (`public` / `internal` / `restricted`) is enforced per query mode.
+6. **Feedback → distill** — a thumbs-down on an answer is logged; a distill agent periodically turns accumulated feedback into corrections and standing rules (`lessons.md`), which every agent reads on every call.
+7. **Lint / split** — a lint agent checks for orphan pages, broken references, and stale claims; a split agent (human-triggered) reorganizes a category into subtopics once it crosses a size threshold.
+
+## Architecture
+
+- **Backend** — FastAPI (Python). Claude agents for classify / ingest / query / distill / lint / split, each with a narrow, explicit tool set (see `SCHEMA.md` §8).
+- **Storage** — the wiki, raw source files, and the pending-review queue live in the client's own Microsoft OneDrive, accessed via the Microsoft Graph API (app-only, `Files.ReadWrite.All`) rather than local disk. This was a contractual requirement — the client's business data stays in their own Microsoft 365 tenant, not on a third-party server's filesystem.
+- **Auth** — Clerk. The frontend signs users in with Clerk; the backend verifies the resulting session JWT against Clerk's public JWKS on every request (`backend/auth.py`), applied as a single middleware rather than per-route checks.
+- **Frontend** — React + Vite. Three tabs: **Ask** (chat against the wiki, with cited pages shown as access-stamped cards, and inline answer correction), **Ingest** (drop a PDF or markdown file), **Review feedback** (see flagged corrections and trigger distillation). A left-rail card-catalog view browses the wiki directly.
+
+## API
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /ingest`, `POST /ingest/stream` | Submit a document for classification and (if confident) writing |
+| `GET /pending-review`, `POST /pending-review/{id}/approve`, `POST /pending-review/{id}/reject` | Human review queue for low-confidence ingests |
+| `POST /query` | Ask a question (`mode: "internal"` or `"public"`) |
+| `POST /feedback` | Flag an answer with a correction |
+| `POST /distill` | Turn accumulated feedback into lessons/corrections |
+| `POST /lint` | Run consistency checks over the wiki |
+| `POST /split/{category}` | Reorganize an overgrown category into subtopics |
+| `GET /wiki/files`, `GET /wiki/file`, `DELETE /wiki/file` | Browse / read / remove wiki pages |
+| `GET /wiki/manifest`, `GET /spend`, `GET /health` | Bookkeeping, usage/cost telemetry, health check |
+
+## Running this yourself
+
+This isn't a casual clone-and-run project — the backend is hardwired (by design) to a real Microsoft 365 tenant and a real Clerk project, and won't even start without them (`backend/config.py` reads required env vars directly, no fallback). To actually run it you'd need:
+
+- An Azure AD app registration with `Files.ReadWrite.All` (application permission, admin-consented) against the target OneDrive
+- A Clerk application (for both the frontend publishable key and the backend's JWKS URL)
+- An Anthropic API key
+
+### Backend environment variables
+
+```
+ANTHROPIC_API_KEY=...
+CLAUDE_MODEL=claude-sonnet-5          # optional, this is the default
+GRAPH_TENANT_ID=...
+GRAPH_CLIENT_ID=...
+GRAPH_CLIENT_SECRET=...
+GRAPH_DRIVE_USER=...                   # UPN of the OneDrive owner
+ONEDRIVE_PROJECT_ROOT=STEGU_WIKI       # optional, this is the default
+CLERK_JWKS_URL=...
+ALLOWED_ORIGINS=http://localhost:5173  # comma-separated, for CORS
+CZK_PER_USD=21.5                       # optional, for the cost dashboard
 ```
 
-## Run
-
-From the project root (important — imports assume `backend` is a package
-rooted here):
-
 ```bash
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
 uvicorn backend.main:app --reload --port 8000
 ```
 
-## Try it
+### Frontend environment variables
 
-**Ingest a document** — either a raw PDF (Claude reads it natively, no
-conversion step) or already-converted markdown:
-
-```bash
-# PDF
-python3 -c "
-import base64, json
-with open('some-catalog.pdf', 'rb') as f:
-    data = base64.b64encode(f.read()).decode()
-print(json.dumps({'filename': 'some-catalog.pdf', 'pdf_base64': data}))
-" > /tmp/ingest_payload.json
-
-curl -X POST http://localhost:8000/ingest \
-  -H "Content-Type: application/json" \
-  -d @/tmp/ingest_payload.json
-
-# Already-converted markdown
-curl -X POST http://localhost:8000/ingest \
-  -H "Content-Type: application/json" \
-  -d '{
-    "filename": "verona-basalt.md",
-    "markdown": "# Verona Basalt Tile\n\nDark grey basalt paving tile, 60x60cm.\nPrice: 1150 CZK/m^2."
-  }'
 ```
-
-Check what it did:
-
-```bash
-curl http://localhost:8000/wiki/files
-curl "http://localhost:8000/wiki/file?path=index.md"
+VITE_API_URL=http://localhost:8000
+VITE_CLERK_PUBLISHABLE_KEY=...
 ```
-
-**Ask a question from internal docs** (internal/dashboard mode):
-
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What outdoor paving products do we have and what do they cost?", "mode": "internal"}'
-```
-
-**Ask a question from public docs** (public-only filtering):
-
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "A customer is asking about the Verona Basalt tile price.", "mode": "public"}'
-```
-
-**Flag a bad answer** (instant, no agent call):
-
-```bash
-curl -X POST http://localhost:8000/feedback \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "What is the price of the Verona Basalt tile?",
-    "bad_answer": "45 EUR/m2",
-    "correction": "Prices are always in CZK. Should be 1150 CZK/m2."
-  }'
-```
-
-**Run distillation** (processes feedback into lessons.md / page corrections):
-
-```bash
-curl -X POST http://localhost:8000/distill
-```
-
-## Dashboard (frontend)
 
 ```bash
 cd frontend
 npm install
-cp .env.example .env   # only needed if backend isn't on localhost:8000
 npm run dev
 ```
 
-Opens at `http://localhost:5173`. Three tabs:
-- **Ask** — chat against the wiki, toggle between `internal` (staff) and
-  `public` (public-only) modes. Cited pages show up on the right as
-  stamped index cards (PUBLIC / INTERNAL / RESTRICTED). Any answer can be
-  flagged with a one-line correction, which goes straight to `/feedback`.
-- **Ingest** — drop a PDF or a `.md` file. PDFs are sent to `/ingest` as
-  base64 and Claude reads them natively; markdown files are sent as plain
-  text. Both update the wiki the same way.
-- **Review feedback** — shows `feedback_log.md` and `lessons.md` as-is, with
-  a button to run `/distill`.
-
-The left rail doubles as a card-catalog browser — click a category to list
-its pages, click a page to view its raw content (with its access stamp) in
-a modal.
-
-## What's not built yet
-
-- Automatic triggering of `/distill` (currently a manual button — fine for MVP).
-- Streaming responses (chat currently waits for the full agent loop to finish
-  before showing an answer — fine while the wiki is small, worth revisiting
-  if ingest/query turns start taking a while).
+Deployed in production as a FastAPI service (Render) behind a static Vercel-hosted frontend.
 
 ## Project layout
 
 ```
-kb-mvp/
-├── SCHEMA.md              # wiki conventions — read by every agent
-├── wiki/                  # the knowledge base itself
-├── raw/                   # original PDFs
+.
+├── SCHEMA.md              # wiki conventions — read by every agent on every call
+├── CLAUDE.md              # pointer to SCHEMA.md for agent instruction files
+├── TODO.md                # deliberately deferred engineering items, with reasoning
+├── wiki/                  # sample of the knowledge base itself (see note below)
+├── raw/, pending_review/, archive/   # same — see note below
 ├── backend/
-│   ├── config.py          # paths + fixed vocabularies (VALID_CATEGORY etc.)
-│   ├── agentic_loop.py     # shared Claude tool-use loop
-│   ├── tools/
-│   │   ├── file_tools.py   # sandboxed read/write/list/grep implementations
-│   │   └── tool_defs.py    # Claude tool schemas per agent
-│   ├── agents/
-│   │   ├── ingest_agent.py
-│   │   ├── query_agent.py
-│   │   └── distill_agent.py
-│   └── main.py             # FastAPI endpoints
+│   ├── config.py           # env-driven config, Graph client wiring
+│   ├── auth.py              # Clerk session verification middleware
+│   ├── graph_client.py      # Microsoft Graph API wrapper
+│   ├── converters.py        # PDF/DOCX/XLSX → markdown
+│   ├── agentic_loop.py       # shared Claude tool-use loop
+│   ├── tools/                # sandboxed file read/write/list/grep, spend tracking
+│   ├── agents/                # classify / ingest / query / distill / lint / split
+│   └── main.py                 # FastAPI endpoints
 └── frontend/
     └── src/
-        ├── api.js                       # fetch wrapper for the backend
+        ├── api.js
         ├── App.jsx
-        └── components/
-            ├── Sidebar.jsx               # tab nav + category/file browser
-            ├── ChatPanel.jsx             # Ask tab
-            ├── IngestPanel.jsx           # Ingest tab
-            ├── ReviewPanel.jsx           # Review feedback tab
-            ├── CitedPagesPanel.jsx       # right rail, stamped index cards
-            ├── FileViewerModal.jsx       # raw page viewer
-            └── AccessStamp.jsx           # the PUBLIC/INTERNAL/RESTRICTED stamp
+        └── components/          # Sidebar, ChatPanel, IngestPanel, ReviewPanel, ...
 ```
+
+**Note on `wiki/`, `raw/`, `pending_review/`, `archive/`:** these folders are committed as a point-in-time sample from an earlier phase of the project, before storage moved to OneDrive/Graph (see `SCHEMA.md`'s runtime note). The live system reads and writes these paths in the client's OneDrive, not from this repository — the committed copies are frozen and won't reflect the current live state.
+
+## What's not built yet
+
+- Automatic triggering of `/distill` (currently a manual button — fine at this scale).
+- Streaming responses for `/query` (currently waits for the full agent loop).
+- See [`TODO.md`](TODO.md) for deferred backend-engineering items and the reasoning behind deferring each one.

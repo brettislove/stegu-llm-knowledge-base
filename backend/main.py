@@ -20,6 +20,7 @@ Run from the project root with:
 import asyncio
 import base64
 import json
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -44,6 +45,11 @@ from backend.graph_client import extract_content_hash
 
 app = FastAPI(title="Knowledge Base MVP")
 
+# Deployed frontend origin(s), comma-separated — kept out of source so the
+# same code isn't tied to one specific domain. Falls back to the local Vite
+# dev server only.
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+
 # Order matters: Starlette applies middleware in reverse of add order, so
 # CORS (added second) runs outermost and can attach headers to the 401
 # responses ClerkAuthMiddleware returns. Auth still runs before any route
@@ -51,11 +57,7 @@ app = FastAPI(title="Knowledge Base MVP")
 app.add_middleware(ClerkAuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://decorstone.sparxoft.com",
-        "https://stegu-llm-knowledge-base.vercel.app/",
-        "http://localhost:5173",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
